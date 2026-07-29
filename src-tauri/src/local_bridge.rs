@@ -198,10 +198,15 @@ pub async fn spawn(app: AppHandle) {
     };
 
     let cors = CorsLayer::new()
-        // The token is the actual auth boundary, so we accept any browser
-        // origin (extension or webpage). Requests without a valid bearer are
-        // still rejected by the handler.
-        .allow_origin(Any)
+        // Restrict to browser extension origins and localhost (dev). The
+        // bearer token is the primary auth boundary, but limiting origins
+        // prevents a leaked token from being exploited by arbitrary websites.
+        // Browser extensions bypass CORS via host_permissions, so they are
+        // unaffected by this restriction.
+        .allow_origin(vec![
+            axum::http::HeaderValue::from_static("http://localhost:1420"),
+            axum::http::HeaderValue::from_static("http://127.0.0.1:1420"),
+        ])
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers(Any);
 

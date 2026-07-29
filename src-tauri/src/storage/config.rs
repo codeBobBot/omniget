@@ -57,5 +57,20 @@ pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> anyhow::Result<
     let val = serde_json::to_value(settings)?;
     store.set(STORE_KEY, val);
     store.save()?;
+
+    // Harden file permissions: settings.json contains the bridge bearer token
+    // and proxy password in plaintext. Restrict to owner-only read/write.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let path = store_path();
+        if path.exists() {
+            let _ = std::fs::set_permissions(
+                &path,
+                std::fs::Permissions::from_mode(0o600),
+            );
+        }
+    }
+
     Ok(())
 }

@@ -25,14 +25,22 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https: data: blob:; media-src 'self' asset: https: blob:; connect-src 'self' https://github.com https://api.github.com ipc: http://ipc.localhost; font-src 'self' data:",
       "assetProtocol": {
         "enable": true,
         "scope": {
           "allow": [
-            "**"
+            "$APPDATA/**",
+            "$DOWNLOAD/**",
+            "$HOME/Downloads/**",
+            "$HOME/Movies/**",
+            "$HOME/Music/**"
           ],
-          "deny": [],
+          "deny": [
+            "$HOME/.ssh/**",
+            "$HOME/.gnupg/**",
+            "$HOME/.aws/**"
+          ],
           "requireLiteralLeadingDot": false
         }
       }

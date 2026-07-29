@@ -883,6 +883,9 @@ pub async fn download_from_url(
             err.limit, err.current, err.reserve
         ));
     }
+    if let Err(msg) = crate::core::path_limits::validate_output_dir_safe(&output_dir) {
+        return Err(msg);
+    }
 
     let mut download_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1036,6 +1039,12 @@ pub async fn download_with_custom_args(
             "PathTooLong|{}|{}|{}",
             err.limit, err.current, err.reserve
         ));
+    }
+    if let Err(msg) = crate::core::path_limits::validate_output_dir_safe(&output_dir) {
+        return Err(msg);
+    }
+    if let Err(msg) = crate::core::path_limits::validate_custom_ytdlp_args(&custom_args) {
+        return Err(msg);
     }
 
     let mut download_id = std::time::SystemTime::now()
@@ -1383,6 +1392,7 @@ pub async fn restore_recovery(
 
 #[tauri::command]
 pub fn parse_batch_file(path: String) -> Result<Vec<String>, String> {
+    crate::core::path_limits::validate_read_path(&path)?;
     let content = std::fs::read_to_string(&path).map_err(|e| format!("Read error: {}", e))?;
     let mut urls = Vec::new();
     for raw in content.lines() {

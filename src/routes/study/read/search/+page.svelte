@@ -81,11 +81,15 @@
     goto(`/study/read/${r.book_id}?${params.toString()}`);
   }
 
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
   function highlight(text: string, q: string): string {
-    if (!q.trim()) return text;
+    if (!q.trim()) return escapeHtml(text);
     const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`(${safeQ})`, "gi");
-    return text.replace(re, "<mark>$1</mark>");
+    return escapeHtml(text).replace(re, "<mark>$1</mark>");
   }
 
   function fmtDate(secs: number): string {

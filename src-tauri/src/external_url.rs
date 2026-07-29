@@ -323,15 +323,20 @@ pub async fn handle_external_url(
     }
 
     let settings = config::load_settings(app);
-    let can_queue_directly = (!settings.download.always_ask_path
-        || settings.download.auto_download_on_paste)
+
+    // Security: URLs arriving via the omniget:// scheme can be triggered by any
+    // webpage (<a href="omniget://...">). Never auto-queue them — always require
+    // user confirmation via the prefill path to prevent drive-by downloads.
+    let can_queue_directly = !scheme_arrival
+        && (!settings.download.always_ask_path
+            || settings.download.auto_download_on_paste)
         && has_valid_output_dir(&settings.download.default_output_dir);
 
     let open_app_flag = crate::extension_storage::peek_extension_open_app(&url);
 
     let action = if can_queue_directly {
         let outcome = queue_url_with_defaults(app, url.clone(), false, None).await?;
-        if open_app_flag == Some(true) || scheme_arrival {
+        if open_app_flag == Some(true) {
             crate::tray::show_window(app);
         }
         match outcome {

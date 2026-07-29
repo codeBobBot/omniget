@@ -95,8 +95,12 @@
     return new Date(secs * 1000).toLocaleDateString();
   }
 
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
   function highlightSnippet(s: string): string {
-    return s.replace(/<<(.*?)>>/g, "<mark>$1</mark>");
+    return escapeHtml(s).replace(/&lt;&lt;(.*?)&gt;&gt;/g, "<mark>$1</mark>");
   }
 
   onMount(async () => {
