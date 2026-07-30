@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::core::path_limits;
 use super::parsers;
 use super::platform::PlatformKind;
 use super::storage::{self, AccountEntry, CookieRegistry, IngestSource};
@@ -257,6 +258,7 @@ pub struct ImportFileRequest {
 
 #[tauri::command]
 pub async fn cookies_import_file(request: ImportFileRequest) -> Result<ImportResponse, String> {
+    path_limits::validate_read_path(&request.path)?;
     let path = std::path::Path::new(&request.path);
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read {}: {e}", request.path))?;
@@ -341,6 +343,7 @@ pub async fn cookies_add_account(request: AddAccountRequest) -> Result<AddAccoun
 
 #[tauri::command]
 pub async fn cookies_export_to(request: ExportToRequest) -> Result<OkResponse, String> {
+    path_limits::validate_output_dir_safe(&request.destination_path)?;
     let slug = request.slug.as_deref().unwrap_or(DEFAULT_SLUG);
     let content = storage::read_account_file(&request.domain, slug).map_err(|e| e.to_string())?;
     std::fs::write(&request.destination_path, content)

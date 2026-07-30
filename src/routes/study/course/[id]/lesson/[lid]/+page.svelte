@@ -7,7 +7,7 @@
   import { rpcSetSource, rpcClearSource } from "$lib/rpc";
   import { awardXp, bumpCounter } from "$lib/study-gamification";
   import { onFocusBreakStart } from "$lib/study-focus-bridge";
-  import { renderMarkdownSync } from "$lib/study-markdown";
+  import { renderMarkdownSync, sanitizeHtml } from "$lib/study-markdown";
   import { t } from "$lib/i18n";
   import SegmentedControl from "$lib/study-components/SegmentedControl.svelte";
   import PlayerShell from "$lib/study-components/player/PlayerShell.svelte";
@@ -1348,7 +1348,7 @@
               <section class="lesson-description">
                 <h3>{$t("study.lesson.description_title")}</h3>
                 {#if lesson.description_format === "html"}
-                  <div class="md-render">{@html lesson.description_raw}</div>
+                  <div class="md-render">{@html sanitizeHtml(lesson.description_raw)}</div>
                 {:else if lesson.description_format === "md"}
                   <div class="md-render">{@html renderMd(lesson.description_raw)}</div>
                 {:else}

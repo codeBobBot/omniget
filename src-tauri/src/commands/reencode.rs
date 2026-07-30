@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::core::path_limits;
 use omniget_core::core::ffmpeg;
 use omniget_core::core::hwaccel;
 use omniget_core::core::process;
@@ -40,12 +41,18 @@ pub async fn reencode_video(req: ReencodeRequest) -> Result<ReencodeResult, Stri
         return Err("ffmpeg not found".to_string());
     }
 
+    path_limits::validate_read_path(&req.input_path)?;
+
     let input = PathBuf::from(&req.input_path);
     if !input.is_file() {
         return Err(format!("source not found: {}", req.input_path));
     }
     let original_size = std::fs::metadata(&input).map(|m| m.len()).unwrap_or(0);
 
+    // Validate user-supplied output path; auto-derived path from validated input is safe
+    if let Some(ref out) = req.output_path {
+        path_limits::validate_output_dir_safe(out)?;
+    }
     let output = req.output_path.clone().unwrap_or_else(|| {
         let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("out");
         let parent = input

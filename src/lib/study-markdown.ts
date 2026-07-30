@@ -33,6 +33,22 @@ function sanitize(html: string): string {
   });
 }
 
+/** Sanitize raw HTML content to prevent XSS from untrusted sources (e.g. course descriptions). */
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      "p", "br", "b", "i", "em", "strong", "a", "ul", "ol", "li",
+      "code", "pre", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6",
+      "img", "table", "thead", "tbody", "tr", "th", "td", "hr", "del",
+      "sup", "sub", "details", "summary", "span", "div",
+      "video", "source", "iframe",
+    ],
+    ALLOWED_ATTR: ["href", "src", "alt", "title", "class", "target", "rel",
+                   "width", "height", "controls", "frameborder", "allowfullscreen"],
+    ALLOW_DATA_ATTR: false,
+  });
+}
+
 export async function renderMarkdown(text: string): Promise<string> {
   if (!text) return "";
   try {
@@ -56,6 +72,19 @@ export function renderMarkdownSync(
     onReady?.();
   });
   return escapeHtml(text);
+}
+
+/** Render markdown once using marked + DOMPurify (no cache).
+ *  Suitable for trust-but-verify contexts like changelogs fetched from GitHub. */
+export async function renderSafeMarkdown(md: string): Promise<string> {
+  if (!md) return "";
+  try {
+    const m = await getMarked();
+    const out = m.parse(md, { async: false }) as string;
+    return sanitize(out);
+  } catch {
+    return escapeHtml(md);
+  }
 }
 
 function escapeHtml(s: string): string {

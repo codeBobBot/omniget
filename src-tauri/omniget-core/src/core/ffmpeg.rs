@@ -270,6 +270,16 @@ pub async fn convert(
     cancel_token: CancellationToken,
     progress_tx: mpsc::Sender<ProgressUpdate>,
 ) -> anyhow::Result<ConversionResult> {
+    // Validate user-supplied extra args before passing them to ffmpeg.
+    if let Some(ref args) = opts.additional_input_args {
+        crate::core::ffmpeg_ops::validate_transform_args(args)
+            .map_err(|e| anyhow!("invalid additional_input_args: {e}"))?;
+    }
+    if let Some(ref args) = opts.additional_output_args {
+        crate::core::ffmpeg_ops::validate_transform_args(args)
+            .map_err(|e| anyhow!("invalid additional_output_args: {e}"))?;
+    }
+
     let input_path = Path::new(&opts.input_path);
     let output_path = Path::new(&opts.output_path);
 

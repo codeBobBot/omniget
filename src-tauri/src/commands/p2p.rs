@@ -3,6 +3,7 @@ use tauri::Emitter;
 use tokio_util::sync::CancellationToken;
 
 use crate::{AppState, P2pSendHandle};
+use crate::core::path_limits;
 use omniget_core::platforms::p2p;
 
 #[derive(Clone, Serialize)]
@@ -29,6 +30,7 @@ pub async fn p2p_send_file(
     state: tauri::State<'_, AppState>,
     file_path: String,
 ) -> Result<P2pSendStarted, String> {
+    path_limits::validate_read_path(&file_path)?;
     let path = std::path::PathBuf::from(&file_path);
     let cancel_token = CancellationToken::new();
 

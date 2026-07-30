@@ -79,6 +79,21 @@ fn load_from_disk() -> AiConfig {
     }
 }
 
+/// Restrict file permissions to owner-only (0o600) on Unix systems.
+/// No-op on non-Unix platforms (Windows, etc.).
+fn set_owner_only_perms(file: &std::fs::File) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = file.metadata()?.permissions();
+        perms.set_mode(0o600);
+        file.set_permissions(perms)?;
+    }
+    #[cfg(not(unix))]
+    let _ = file;
+    Ok(())
+}
+
 fn write_to_disk(cfg: &AiConfig) {
     let Some(path) = file_path() else { return };
     let Some(parent) = path.parent() else { return };
@@ -97,6 +112,7 @@ fn write_to_disk(cfg: &AiConfig) {
     let result = (|| -> std::io::Result<()> {
         use std::io::Write;
         let mut f = std::fs::File::create(&tmp)?;
+        set_owner_only_perms(&f)?;
         f.write_all(serialized.as_bytes())?;
         f.sync_all()?;
         Ok(())
@@ -109,6 +125,11 @@ fn write_to_disk(cfg: &AiConfig) {
     if let Err(e) = std::fs::rename(&tmp, &path) {
         tracing::warn!("[ai] rename failed: {}", e);
         let _ = std::fs::remove_file(&tmp);
+        return;
+    }
+    // Re-apply restrictive permissions after rename (in case umask or fs differs)
+    if let Ok(f) = std::fs::File::open(&path) {
+        let _ = set_owner_only_perms(&f);
     }
 }
 

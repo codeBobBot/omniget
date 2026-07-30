@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
+use crate::core::path_limits;
 use omniget_core::core::ffmpeg;
 use omniget_core::core::process;
 
@@ -31,6 +32,8 @@ pub async fn clip_video(_app: AppHandle, req: ClipRequest) -> Result<ClipResult,
         return Err("ffmpeg not found".to_string());
     }
 
+    path_limits::validate_read_path(&req.source_path)?;
+
     let source = PathBuf::from(&req.source_path);
     if !source.is_file() {
         return Err(format!("source not found: {}", req.source_path));
@@ -40,7 +43,10 @@ pub async fn clip_video(_app: AppHandle, req: ClipRequest) -> Result<ClipResult,
     let start = req.start_secs.max(0.0);
 
     let dest_dir = match req.dest_dir.as_deref() {
-        Some(d) if !d.is_empty() => PathBuf::from(d),
+        Some(d) if !d.is_empty() => {
+            path_limits::validate_output_dir_safe(d)?;
+            PathBuf::from(d)
+        }
         _ => default_dest_dir(&source),
     };
     std::fs::create_dir_all(&dest_dir).map_err(|e| format!("mkdir failed: {}", e))?;

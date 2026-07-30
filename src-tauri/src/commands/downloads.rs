@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
+use crate::core::path_limits;
 use crate::core::queue::{self, emit_queue_state_from_state};
 use crate::core::url_parser;
 use crate::platforms::Platform;
@@ -271,6 +272,7 @@ pub async fn metadata_fetch(
     url: String,
     output_dir: String,
 ) -> Result<MetadataFetchResult, String> {
+    path_limits::validate_output_dir_safe(&output_dir)?;
     let ytdlp_path = ytdlp::find_ytdlp_cached()
         .await
         .ok_or_else(|| "yt-dlp unavailable".to_string())?;
@@ -400,6 +402,7 @@ pub async fn thumbnail_save(
     output_dir: String,
     file_name: String,
 ) -> Result<String, String> {
+    path_limits::validate_output_dir_safe(&output_dir)?;
     let client = crate::core::http_client::apply_global_proxy(reqwest::Client::builder())
         .build()
         .map_err(|e| e.to_string())?;
@@ -542,6 +545,7 @@ pub async fn subtitles_save(
     output_dir: String,
     file_name: String,
 ) -> Result<String, String> {
+    path_limits::validate_output_dir_safe(&output_dir)?;
     let client = crate::core::http_client::apply_global_proxy(reqwest::Client::builder())
         .build()
         .map_err(|e| e.to_string())?;
@@ -566,6 +570,7 @@ pub async fn subtitles_merge(
     output_dir: String,
     file_name: String,
 ) -> Result<String, String> {
+    path_limits::validate_output_dir_safe(&output_dir)?;
     let client = crate::core::http_client::apply_global_proxy(reqwest::Client::builder())
         .build()
         .map_err(|e| e.to_string())?;
@@ -734,6 +739,7 @@ pub async fn tools_save_text(
     file_name: String,
     content: String,
 ) -> Result<String, String> {
+    path_limits::validate_output_dir_safe(&output_dir)?;
     let safe = sanitize_filename::sanitize(&file_name);
     if safe.is_empty() {
         return Err("invalid file name".to_string());
@@ -1512,6 +1518,7 @@ pub async fn clear_finished_downloads(
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub async fn reveal_file(path: String) -> Result<(), String> {
+    path_limits::validate_read_path(&path)?;
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -1637,6 +1644,7 @@ pub async fn reveal_file(path: String) -> Result<(), String> {
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub async fn open_path_default(path: String) -> Result<(), String> {
+    path_limits::validate_read_path(&path)?;
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;

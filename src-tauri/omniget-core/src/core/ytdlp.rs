@@ -2191,10 +2191,12 @@ pub async fn download_video(
     }
 
     if let Some(ref_url) = referer {
+        // Sanitize to prevent CRLF header injection
+        let safe_ref = ref_url.replace(|c: char| c == '\r' || c == '\n', "");
         base_args.push("--referer".to_string());
-        base_args.push(ref_url.to_string());
+        base_args.push(safe_ref.clone());
         base_args.push("--add-headers".to_string());
-        base_args.push(format!("Referer:{}", ref_url));
+        base_args.push(format!("Referer:{safe_ref}"));
     }
 
     if let Some(ext_headers) = ext_headers_for_url(url) {

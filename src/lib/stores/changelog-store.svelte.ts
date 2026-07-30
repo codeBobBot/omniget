@@ -2,10 +2,20 @@ import { getVersion } from "@tauri-apps/api/app";
 
 const STORAGE_KEY = "omniget_last_seen_version";
 const CHANGELOG_BODY_KEY = "omniget_pending_changelog";
+const MAX_BODY_BYTES = 128_000; // ~128 KB ceiling for changelog body
 
 let showDialog = $state(false);
 let changelogBody = $state("");
 let currentVersion = $state("");
+
+/** Reject clearly invalid changelog bodies (binary data, oversized payloads). */
+function isValidBody(body: unknown): body is string {
+  if (typeof body !== "string") return false;
+  if (body.length === 0) return false;
+  if (body.length > 16384 && new TextEncoder().encode(body).length > MAX_BODY_BYTES)
+    return false;
+  return true;
+}
 
 export function getChangelogVisible(): boolean {
   return showDialog;
@@ -48,7 +58,7 @@ export async function initChangelog(): Promise<void> {
   if (pending) {
     try {
       const { body, version } = JSON.parse(pending);
-      if (version === currentVersion && body) {
+      if (version === currentVersion && isValidBody(body)) {
         changelogBody = body;
         if (lastSeen !== currentVersion) {
           showDialog = true;
@@ -76,7 +86,7 @@ export async function fetchChangelog(): Promise<string> {
     );
     if (res.ok) {
       const data = await res.json();
-      if (data.body) {
+      if (isValidBody(data.body)) {
         changelogBody = data.body;
         return data.body;
       }
@@ -90,7 +100,7 @@ export async function fetchChangelog(): Promise<string> {
     );
     if (res.ok) {
       const data = await res.json();
-      if (data.body) {
+      if (isValidBody(data.body)) {
         changelogBody = data.body;
         return data.body;
       }

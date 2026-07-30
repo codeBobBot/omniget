@@ -6,73 +6,26 @@
     getCurrentVersion,
     fetchChangelog,
   } from "$lib/stores/changelog-store.svelte";
+  import { renderSafeMarkdown } from "$lib/study-markdown";
 
   let body = $derived(getChangelogBody());
   let version = $derived(getCurrentVersion());
   let loading = $state(true);
+  let renderedHtml = $state("");
 
   onMount(async () => {
     await fetchChangelog();
     loading = false;
   });
 
-  function renderMarkdown(md: string): string {
-    const out: string[] = [];
-    let inFence = false;
-    let fenceLines: string[] = [];
-    for (const line of md.split("\n")) {
-      if (line.trim().startsWith("```")) {
-        if (inFence) {
-          out.push(`<pre><code>${escapeHtml(fenceLines.join("\n"))}</code></pre>`);
-          fenceLines = [];
-        }
-        inFence = !inFence;
-        continue;
-      }
-      if (inFence) {
-        fenceLines.push(line);
-        continue;
-      }
-      if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) {
-        out.push("<hr />");
-      } else if (line.startsWith("### ")) {
-        out.push(`<h4>${escapeHtml(line.slice(4))}</h4>`);
-      } else if (line.startsWith("## ")) {
-        out.push(`<h3>${escapeHtml(line.slice(3))}</h3>`);
-      } else if (line.startsWith("# ")) {
-        out.push(`<h2>${escapeHtml(line.slice(2))}</h2>`);
-      } else if (line.startsWith("- ") || line.startsWith("* ")) {
-        out.push(`<li>${formatInline(line.slice(2))}</li>`);
-      } else if (line.trim() === "") {
-        out.push("<br />");
-      } else {
-        out.push(`<p>${formatInline(line)}</p>`);
-      }
+  $effect(() => {
+    const b = body;
+    if (b) {
+      renderSafeMarkdown(b).then((h) => (renderedHtml = h));
+    } else {
+      renderedHtml = "";
     }
-    if (inFence && fenceLines.length) {
-      out.push(`<pre><code>${escapeHtml(fenceLines.join("\n"))}</code></pre>`);
-    }
-    return out.join("");
-  }
-
-  function escapeHtml(str: string): string {
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function formatInline(str: string): string {
-    let result = escapeHtml(str);
-    result = result.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    result = result.replace(/`(.+?)`/g, "<code>$1</code>");
-    result = result.replace(
-      /\[(.+?)\]\((.+?)\)/g,
-      '<a href="$2" target="_blank" rel="noopener">$1</a>'
-    );
-    return result;
-  }
+  });
 </script>
 
 <div class="changelog-page">
@@ -87,10 +40,10 @@
     <div class="loading">
       <span class="spinner"></span>
     </div>
-  {:else if body}
+  {:else if renderedHtml}
     <div class="card">
       <div class="markdown-content">
-        {@html renderMarkdown(body)}
+        {@html renderedHtml}
       </div>
     </div>
   {:else}

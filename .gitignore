@@ -259,3 +259,5 @@ vite.config.ts.timestamp-*
 .vite/
 .varredura/
 remake/shots/
+
+.codebuddy/
