@@ -57,6 +57,20 @@ pub fn cookies_root() -> PathBuf {
         .join("cookies")
 }
 
+/// Apply owner-only directory permissions on Unix (0o700).
+/// On Windows the hardening is deferred to full-disk encryption (BitLocker).
+fn harden_dir<P: AsRef<std::path::Path>>(path: P) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let p = path.as_ref();
+        if p.exists() {
+            let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o700));
+        }
+    }
+    let _ = path;
+}
+
 pub fn bucket_dir(domain: &str) -> PathBuf {
     cookies_root().join(safe_domain_segment(domain))
 }
@@ -116,6 +130,7 @@ pub fn save_registry(registry: &CookieRegistry) -> anyhow::Result<()> {
     let path = meta_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
+        harden_dir(parent);
     }
     let serialized = serde_json::to_string_pretty(registry)?;
     let tmp = path.with_extension("json.tmp");
@@ -209,6 +224,7 @@ pub fn write_account_file(
     let path = account_file(domain, slug);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
+        harden_dir(parent);
     }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -334,6 +350,7 @@ pub fn move_to_trash(domain: &str, slug: &str) -> anyhow::Result<()> {
     }
     let trash = trash_dir();
     fs::create_dir_all(&trash)?;
+    harden_dir(&trash);
     let stamp = current_unix_ms();
     let dst_name = format!(
         "{}__{}__{}.txt",

@@ -11,6 +11,9 @@ pub fn channel_add(url: String, title: Option<String>) -> Result<ChannelFollow, 
     if url.is_empty() {
         return Err("Empty URL".to_string());
     }
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Only http and https URLs are allowed".to_string());
+    }
     let title = title
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())

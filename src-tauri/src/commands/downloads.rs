@@ -313,14 +313,38 @@ pub async fn metadata_fetch(
         if let Ok(client) =
             crate::core::http_client::apply_global_proxy(reqwest::Client::builder()).build()
         {
-            if let Ok(resp) = client.get(thumb).send().await {
-                if resp.status().is_success() {
-                    if let Ok(bytes) = resp.bytes().await {
-                        let tname = format!("{title}.jpg");
-                        if tokio::fs::write(dir.join(&tname), &bytes).await.is_ok() {
-                            saved.push(tname);
+            match client.get(thumb).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    // Cap: thumbnails larger than 50 MB are suspicious.
+                    const THUMB_MAX_BYTES: u64 = 50 * 1024 * 1024;
+                    let cl = resp.content_length();
+                    if cl.map(|n| n > THUMB_MAX_BYTES).unwrap_or(false) {
+                        tracing::warn!(
+                            "[metadata] thumbnail Content-Length {} exceeds limit, skipping",
+                            cl.unwrap()
+                        );
+                    } else {
+                        match resp.bytes().await {
+                            Ok(bytes) if bytes.len() as u64 <= THUMB_MAX_BYTES => {
+                                let tname = format!("{title}.jpg");
+                                if tokio::fs::write(dir.join(&tname), &bytes).await.is_ok() {
+                                    saved.push(tname);
+                                }
+                            }
+                            Ok(_) => {
+                                tracing::warn!("[metadata] thumbnail body exceeded 50 MB limit, skipping");
+                            }
+                            Err(e) => {
+                                tracing::warn!("[metadata] thumbnail download failed: {e}");
+                            }
                         }
                     }
+                }
+                Ok(resp) => {
+                    tracing::warn!("[metadata] thumbnail HTTP {}", resp.status());
+                }
+                Err(e) => {
+                    tracing::warn!("[metadata] thumbnail request failed: {e}");
                 }
             }
         }
@@ -1521,6 +1545,10 @@ pub async fn reveal_file(path: String) -> Result<(), String> {
     path_limits::validate_read_path(&path)?;
     #[cfg(target_os = "windows")]
     {
+        // Path with embedded double quotes would break /select,"..." quoting
+        if path.contains('"') || path.contains('&') {
+            return Err("Path contains invalid characters".into());
+        }
         use std::os::windows::process::CommandExt;
         std::process::Command::new("explorer")
             .raw_arg(format!("/select,\"{}\"", path))
@@ -1647,12 +1675,7 @@ pub async fn open_path_default(path: String) -> Result<(), String> {
     path_limits::validate_read_path(&path)?;
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", &path])
-            .creation_flags(0x08000000)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        open::that(&path).map_err(|e| format!("Failed to open path: {}", e))?;
     }
 
     #[cfg(target_os = "macos")]

@@ -363,20 +363,42 @@ async fn download_ffmpeg() -> anyhow::Result<PathBuf> {
         let temp_path = bin_dir.join(".ffmpeg_download.tmp");
         let bytes = response.bytes().await?;
         let data = bytes.to_vec();
-        let temp_clone = temp_path.clone();
-        tokio::task::spawn_blocking(move || std::fs::write(&temp_clone, &data))
-            .await
-            .map_err(|e| anyhow!("spawn_blocking failed: {}", e))??;
 
-        let file_size = std::fs::metadata(&temp_path)?.len();
+        // Integrity check: BtbN publishes a sha256sums.txt per release.
+        // macos (evermeet.cx) is a third-party source — verify only size.
+        let asset_name = url.rsplit('/').next().unwrap_or("ffmpeg-archive");
+        if url.contains("BtbN") {
+            // e.g. https://.../releases/download/latest/ffmpeg-….zip
+            //  → sums URL: https://.../releases/download/latest/sha256sums.txt
+            let sums_url = format!(
+                "{}/sha256sums.txt",
+                url.rsplitn(2, '/').nth(1).unwrap_or("")
+            );
+            let expected = integrity::expected_from_sums_url(&client, &sums_url, asset_name)
+                .await
+                .map_err(|e| anyhow!("FFmpeg: integridade impossível — {}", e))?;
+            integrity::verify_sha256(&data, &expected, &format!("FFmpeg ({})", asset_name))?;
+        } else {
+            // macOS via evermeet.cx — no published checksums available
+            tracing::warn!(
+                "[integrity] FFmpeg ({}) via evermeet.cx — sem sha256 disponível, verificando apenas tamanho",
+                asset_name
+            );
+        }
+
+        let file_size = data.len() as u64;
         if file_size < 1_000_000 {
-            let _ = std::fs::remove_file(&temp_path);
             return Err(anyhow!(
                 "Downloaded file from {} is too small ({}B) — likely an error page",
                 url,
                 file_size
             ));
         }
+
+        let temp_clone = temp_path.clone();
+        tokio::task::spawn_blocking(move || std::fs::write(&temp_clone, &data))
+            .await
+            .map_err(|e| anyhow!("spawn_blocking failed: {}", e))??;
 
         match archive_type {
             ArchiveType::Zip => {
@@ -677,6 +699,19 @@ async fn download_deno() -> anyhow::Result<PathBuf> {
 
     let bytes = response.bytes().await?;
     let data = bytes.to_vec();
+
+    // Deno publishes a per-asset .sha256sum file (e.g. deno-x86_64-….zip.sha256sum)
+    let asset_name = url.rsplit('/').next().unwrap_or("deno-unknown.zip");
+    let sums_url = format!("{}.sha256sum", url);
+    match integrity::expected_from_sums_url(&client, &sums_url, asset_name).await {
+        Ok(expected) => {
+            integrity::verify_sha256(&data, &expected, &format!("Deno ({})", asset_name))?;
+        }
+        Err(e) => {
+            return Err(anyhow!("Deno: integridade impossível — {}", e));
+        }
+    }
+
     let bin_dir_clone = bin_dir.clone();
     let deno_name_clone = deno_name.clone();
 
@@ -773,6 +808,19 @@ async fn download_gallerydl() -> anyhow::Result<PathBuf> {
 
     let bytes = response.bytes().await?;
     let data = bytes.to_vec();
+
+    // gallery-dl publishes .sha256 per asset on GitHub releases
+    let asset_name = url.rsplit('/').next().unwrap_or("gallery-dl-unknown");
+    let sums_url = format!("{}.sha256", url);
+    match integrity::expected_from_sums_url(&client, &sums_url, asset_name).await {
+        Ok(expected) => {
+            integrity::verify_sha256(&data, &expected, &format!("gallery-dl ({})", asset_name))?;
+        }
+        Err(e) => {
+            return Err(anyhow!("gallery-dl: integridade impossível — {}", e));
+        }
+    }
+
     let target_clone = target.clone();
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         std::fs::write(&target_clone, &data)?;

@@ -124,6 +124,11 @@ pub fn write_extension_cookies(cookies: &[ExtensionCookie]) -> anyhow::Result<()
     let path = extension_cookie_file_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+        }
     }
 
     // Session cookies (expires == 0) must be given a future TTL.
@@ -234,6 +239,13 @@ fn write_metadata_map(
     }
     let serialized = serde_json::to_string(&serde_json::Value::Object(map.clone()))?;
     fs::write(path, serialized)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
+
     Ok(())
 }
 
@@ -241,6 +253,11 @@ pub fn write_extension_metadata(payload: &ExtensionPayload) -> anyhow::Result<()
     let path = extension_metadata_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+        }
     }
 
     let now = current_unix_timestamp();

@@ -82,6 +82,8 @@ async fn run_session(client: &LcuClient) -> Result<(), String> {
             .parse()
             .map_err(|_| "bad auth header".to_string())?,
     );
+    // SAFETY: LCU runs on localhost with a self-signed certificate.  See
+    // `http_client()` in mod.rs for the full threat-model rationale.
     let tls = native_tls::TlsConnector::builder()
         .danger_accept_invalid_certs(true)
         .build()

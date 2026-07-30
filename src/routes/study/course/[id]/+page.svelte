@@ -530,7 +530,7 @@
         {:else if description.format === "html"}
           <div class="md-render">{@html sanitizeHtml(description.raw)}</div>
         {:else}
-          <div class="md-render">{@html description.raw}</div>
+          <div class="md-render">{@html sanitizeHtml(description.raw)}</div>
         {/if}
         <button
           type="button"

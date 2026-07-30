@@ -408,23 +408,72 @@ pub async fn install_plugin_zip_from_repo(
         .await
         .map_err(|e| format!("NetworkUnreachable|Failed to read download: {}", e))?;
 
+    // Verify integrity if the release publishes a .sha256 file for the zip asset.
+    use omniget_core::core::dependencies::integrity;
+    let checksum_asset_name = format!("{}.sha256", asset.name);
+    if let Some(cs) = release.assets.iter().find(|a| a.name == checksum_asset_name) {
+        let sums_url = &cs.browser_download_url;
+        match integrity::expected_from_sums_url(&client, sums_url, &asset.name).await {
+            Ok(expected) => {
+                integrity::verify_sha256(
+                    &zip_bytes,
+                    &expected,
+                    &format!("plugin '{}' ({})", plugin_id, asset.name),
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Plugin '{}': integrity check impossible — release publishes .sha256 but it could not be fetched: {}",
+                    plugin_id, e
+                ));
+            }
+        }
+    } else {
+        return Err(format!(
+            "Plugin '{}' ({}) — no .sha256 published for integrity verification. The release must include a {}.sha256 checksum file alongside the zip asset.",
+            plugin_id,
+            asset.name,
+            asset.name,
+        ));
+    }
+
     let plugin_dir = {
         let manager = state.read().await;
         manager.plugin_dir(&plugin_id).map_err(|e| e.to_string())?
     };
     std::fs::create_dir_all(&plugin_dir).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&plugin_dir, std::fs::Permissions::from_mode(0o700));
+    }
 
     let cursor = std::io::Cursor::new(zip_bytes);
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Invalid ZIP: {}", e))?;
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
-        let outpath = plugin_dir.join(file.mangled_name());
+        // Security: enclosed_name() prevents Zip Slip via ".." components
+        let outpath = plugin_dir.join(
+            file.enclosed_name()
+                .ok_or_else(|| format!("Zip entry name contains path traversal"))?
+        );
         if file.is_dir() {
             std::fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&outpath, std::fs::Permissions::from_mode(0o700));
+            }
         } else {
             if let Some(parent) = outpath.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+                }
             }
             if outpath.exists() {
                 let old = outpath.with_extension("old");

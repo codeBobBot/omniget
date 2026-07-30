@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n";
+  import { sanitizeSvg } from "$lib/study-markdown";
 
   type QrSession = {
     qrcode_key: string;
@@ -148,7 +149,7 @@
           </div>
         {:else if session}
           <div class="qr-wrap" data-phase={phase}>
-            {@html session.qrcode_svg}
+            {@html sanitizeSvg(session.qrcode_svg)}
           </div>
           <p class="status" data-phase={phase}>
             {#if phase === "scanned"}

@@ -74,6 +74,12 @@ fn write_to_disk(items: &HashMap<u64, RecoveryItem>) {
     }
 }
 
+fn lock_store() -> std::sync::MutexGuard<'static, HashMap<u64, RecoveryItem>> {
+    store()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 pub fn init_from_disk() {
     let Some(path) = file_path() else { return };
     let content = match std::fs::read_to_string(&path) {
@@ -87,7 +93,7 @@ pub fn init_from_disk() {
             return;
         }
     };
-    let mut guard = store().lock().unwrap();
+    let mut guard = lock_store();
     guard.clear();
     for item in parsed.items {
         guard.insert(item.id, item);
@@ -95,25 +101,25 @@ pub fn init_from_disk() {
 }
 
 pub fn persist(item: RecoveryItem) {
-    let mut guard = store().lock().unwrap();
+    let mut guard = lock_store();
     guard.insert(item.id, item);
     write_to_disk(&guard);
 }
 
 pub fn remove(id: u64) {
-    let mut guard = store().lock().unwrap();
+    let mut guard = lock_store();
     if guard.remove(&id).is_some() {
         write_to_disk(&guard);
     }
 }
 
 pub fn list() -> Vec<RecoveryItem> {
-    let guard = store().lock().unwrap();
+    let guard = lock_store();
     guard.values().cloned().collect()
 }
 
 pub fn clear_all() {
-    let mut guard = store().lock().unwrap();
+    let mut guard = lock_store();
     guard.clear();
     write_to_disk(&guard);
 }

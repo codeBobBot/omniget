@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from "svelte";
   import { t } from "$lib/i18n";
+  import { sanitizeSvg } from "$lib/study-markdown";
   import {
     telegramQrStart,
     telegramQrPoll,
@@ -199,7 +200,7 @@
         <div class="qr-pane" role="tabpanel">
           {#if qr}
             <div class="qr-svg">
-              {@html qr.svg}
+              {@html sanitizeSvg(qr.svg)}
             </div>
             <p class="muted small">{$t("study.library.telegram.auth.qr_hint_scan")}</p>
             <p class="muted small mono">

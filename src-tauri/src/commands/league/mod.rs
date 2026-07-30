@@ -76,6 +76,16 @@ async fn discover_client() -> Option<LcuClient> {
         let port = extract_arg(line, "app-port").and_then(|p| p.parse::<u16>().ok());
         let token = extract_arg(line, "remoting-auth-token");
         if let (Some(port), Some(token)) = (port, token) {
+            // LCU always binds to an ephemeral port (≥ 49152 on Windows).
+            // Reject unexpectedly low ports that might indicate a parse error
+            // or a non-standard deployment.
+            if port < 49152 {
+                tracing::warn!(
+                    "[league] discovered port {} is below ephemeral range — skipping",
+                    port
+                );
+                continue;
+            }
             let region =
                 extract_arg(line, "region").or_else(|| extract_arg(line, "rso_platform_id"));
             return Some(LcuClient {
@@ -106,6 +116,22 @@ async fn get_client() -> Result<LcuClient, String> {
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
+    // SAFETY: The LCU (League Client Update) API runs exclusively on localhost
+    // with a self-signed certificate that cannot be verified through the normal
+    // PKI chain.  `danger_accept_invalid_certs` is necessary for the client to
+    // communicate with the LCU process.  The attack surface is limited because:
+    //
+    // 1. All requests are sent to https://127.0.0.1:{port} — the IP is
+    //    hard-coded, never derived from user input.
+    //
+    // 2. The `port` value is extracted from the legitimate LeagueClientUx
+    //    process command line via PS/WMI, not from any untrusted source.
+    //
+    // 3. An attacker capable of MITM-ing the loopback interface on the user's
+    //    own machine already has arbitrary code execution.
+    //
+    // We still validate that the discovered port falls in the ephemeral range
+    // (≥ 49152) to reject clearly unexpected values.
     reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(std::time::Duration::from_secs(10))

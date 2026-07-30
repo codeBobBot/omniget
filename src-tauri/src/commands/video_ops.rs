@@ -1,4 +1,5 @@
 use omniget_core::core::ffmpeg_ops;
+use crate::core::path_limits;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::Emitter;
@@ -15,6 +16,7 @@ pub struct VideoOpResult {
 }
 
 fn ensure_input(input: &str) -> Result<PathBuf, String> {
+    path_limits::validate_read_path(input)?;
     let p = PathBuf::from(input);
     if !p.is_file() {
         return Err("Input file not found".to_string());

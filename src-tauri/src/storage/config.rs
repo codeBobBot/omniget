@@ -60,6 +60,11 @@ pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> anyhow::Result<
 
     // Harden file permissions: settings.json contains the bridge bearer token
     // and proxy password in plaintext. Restrict to owner-only read/write.
+    //
+    // Unix: set 0o600 (owner read/write only).
+    // Windows: file ACL is not programmatically tightened at this layer.
+    //          Users should enable BitLocker or another full-disk encryption
+    //          mechanism to protect the app-data directory at rest.
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

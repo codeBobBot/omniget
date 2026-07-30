@@ -13,7 +13,19 @@ pub struct LoadedPlugin {
     pub manifest: PluginManifest,
 }
 
+// SAFETY:
+// - `libloading::Library` owns a handle to a loaded shared library and is `Send` on all
+//   supported platforms. It is not `Sync` because the library could contain mutable
+//   global state, but we never expose the library — only `plugin` (which is `Send + Sync`
+//   via the `OmnigetPlugin: Send + Sync` trait bound) and `manifest` (plain data).
+// - The `_lib` field is named with an underscore prefix to signal it is deliberately
+//   unused at runtime and exists solely to keep the shared library loaded for the
+//   lifetime of the plugin.
+// - Any library loaded through this path is expected to implement the `OmnigetPlugin`
+//   trait correctly and avoid races across shared references.
 unsafe impl Send for LoadedPlugin {}
+// SAFETY: see `Send` impl above — `plugin` is `Send + Sync`, `_lib` is never accessed
+// concurrently.
 unsafe impl Sync for LoadedPlugin {}
 
 #[derive(Debug, Clone, Serialize)]

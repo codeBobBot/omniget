@@ -1396,6 +1396,7 @@ pub async fn get_video_info(
             args.push(proxy_url);
         }
         args.extend(extra_flags.iter().cloned());
+        args.push("--".to_string());
         args.push(url.to_string());
 
         let child = crate::core::process::command(ytdlp)
@@ -1659,6 +1660,7 @@ pub async fn get_playlist_info(
 
     args.extend(proxy_args());
     args.extend(extra_flags.iter().cloned());
+    args.push("--".to_string());
     args.push(url.to_string());
 
     let output = tokio::time::timeout(
@@ -1859,6 +1861,7 @@ pub async fn get_playlist_info_incremental(
         args.push("youtube:player_client=default".to_string());
     }
     args.extend(proxy_args());
+    args.push("--".to_string());
     args.push(url.to_string());
 
     let output = tokio::time::timeout(
@@ -2470,6 +2473,7 @@ pub async fn download_video(
         }
 
         args.extend(extra_args.iter().cloned());
+        args.push("--".to_string());
         args.push(url.to_string());
 
         let mut cmd = crate::core::process::command(ytdlp);

@@ -33,7 +33,8 @@ function sanitize(html: string): string {
   });
 }
 
-/** Sanitize raw HTML content to prevent XSS from untrusted sources (e.g. course descriptions). */
+/** Sanitize raw HTML content to prevent XSS from untrusted sources (e.g. course descriptions).
+ *  iframe without sandbox is an embedding risk — removed. */
 export function sanitizeHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
@@ -41,11 +42,20 @@ export function sanitizeHtml(html: string): string {
       "code", "pre", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6",
       "img", "table", "thead", "tbody", "tr", "th", "td", "hr", "del",
       "sup", "sub", "details", "summary", "span", "div",
-      "video", "source", "iframe",
+      "video", "source",
     ],
     ALLOWED_ATTR: ["href", "src", "alt", "title", "class", "target", "rel",
                    "width", "height", "controls", "frameborder", "allowfullscreen"],
     ALLOW_DATA_ATTR: false,
+  });
+}
+
+/** Sanitize SVG content — strips scripts, event handlers, and unsafe elements.
+ *  Use before injecting SVG via innerHTML or {@html ...}. */
+export function sanitizeSvg(svg: string): string {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ["use"],
   });
 }
 
@@ -91,5 +101,6 @@ function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

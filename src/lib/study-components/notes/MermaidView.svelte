@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { sanitizeSvg } from "$lib/study-markdown";
 
   type Props = {
     source: string;
@@ -152,7 +153,7 @@
     <p class="mermaid-state">renderizando…</p>
   {:else if renderState.kind === "rendered"}
     <div class="mermaid-svg">
-      {@html renderState.svg}
+      {@html sanitizeSvg(renderState.svg)}
     </div>
   {:else if renderState.kind === "error"}
     <div class="mermaid-error">

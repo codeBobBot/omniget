@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { sanitizeSvg } from "$lib/study-markdown";
 
   type Props = {
     source: string;
@@ -79,7 +80,7 @@
         renderState = { kind: "error", message: "container ausente" };
         return;
       }
-      host.innerHTML = svg;
+      host.innerHTML = sanitizeSvg(svg);
       const _id = `plantuml-${blockId}-${token}`;
       void _id;
       renderState = { kind: "rendered" };
@@ -147,7 +148,7 @@
         renderState = { kind: "error", message: "container ausente" };
         return;
       }
-      host.innerHTML = svg;
+      host.innerHTML = sanitizeSvg(svg);
       renderState = { kind: "remote-rendered" };
     } catch (err) {
       if (token !== renderToken) return;

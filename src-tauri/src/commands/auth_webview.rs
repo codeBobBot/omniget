@@ -61,6 +61,33 @@ pub async fn open_auth_webview(
         .parse()
         .map_err(|e| format!("Invalid URL: {}", e))?;
 
+    // Only allow HTTPS authentication flows against known domains to prevent
+    // a caller-controlled auth-webview from being used as a phishing vector.
+    let host = parsed_url.host_str().unwrap_or("");
+    let allowed_domains: &[&str] = &[
+        "passport.bilibili.com",
+        "www.bilibili.com",
+        "bilibili.com",
+        // Add additional OAuth / SSO domains here as new platforms integrate.
+    ];
+    let domain_allowed = allowed_domains
+        .iter()
+        .any(|d| host == *d || host.ends_with(&format!(".{}", d)));
+    if !domain_allowed {
+        return Err(format!(
+            "Auth webview domain '{}' is not in the allowed list",
+            host
+        ));
+    }
+
+    // `initialization_script` runs arbitrary JS in the webview context before
+    // the page loads.  Allow only `None` — no caller currently passes a script
+    // and the feature should be kept disabled until a legitimate use case can
+    // be vetted.
+    if request.initialization_script.is_some() {
+        return Err("initialization_script is not allowed for security reasons".to_string());
+    }
+
     let login_path = parsed_url.path().to_string();
     let login_host = parsed_url.host_str().unwrap_or("").to_string();
 

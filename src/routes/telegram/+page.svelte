@@ -4,6 +4,7 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { open } from "@tauri-apps/plugin-dialog";
   import { showToast } from "$lib/stores/toast-store.svelte";
+  import { sanitizeSvg } from "$lib/study-markdown";
   import { getSettings } from "$lib/stores/settings-store.svelte";
   import { onBatchFileStatus, type BatchFileStatusPayload } from "$lib/stores/download-listener";
   import ContextHint from "$components/hints/ContextHint.svelte";
@@ -1038,7 +1039,7 @@
         </div>
       {:else if qrSvg}
         <div class="qr-container">
-          {@html qrSvg}
+          {@html sanitizeSvg(qrSvg)}
         </div>
       {/if}
 

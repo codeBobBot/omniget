@@ -1,3 +1,4 @@
+use crate::core::path_limits;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -123,6 +124,7 @@ pub async fn browser_extension_export(
 
 #[tauri::command]
 pub async fn browser_extension_open_folder(path: String) -> Result<(), String> {
+    path_limits::validate_read_path(&path)?;
     let path = PathBuf::from(&path);
     if !path.exists() {
         return Err(format!("path not found: {}", path.display()));
