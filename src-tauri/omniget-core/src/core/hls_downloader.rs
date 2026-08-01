@@ -527,10 +527,22 @@ async fn write_segments_ordered(
     use std::io::Write;
     // SECURITY: unlink any pre-existing entry (including a planted symlink)
     // before creating the merged output, so the write cannot be redirected
-    // outside the download directory via a symlink.
+    // outside the download directory via a symlink. Then open with
+    // `create_new(true)` so that if an attacker re-plants a symlink in the
+    // race window between the unlink and the open, the open fails (rather than
+    // silently following the link) instead of overwriting an arbitrary file.
     let _ = std::fs::remove_file(output_path);
-    let mut file =
-        std::io::BufWriter::with_capacity(256 * 1024, std::fs::File::create(output_path)?);
+    let out_file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output_path)
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Refusing to write merged output — path already exists or is a symlink: {}",
+                e
+            )
+        })?;
+    let mut file = std::io::BufWriter::with_capacity(256 * 1024, out_file);
     let mut next_expected: usize = 0;
     let mut pending: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
 

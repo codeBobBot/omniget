@@ -152,6 +152,11 @@ const BANNED_YTDLP_FLAGS: &[&str] = &[
     "--add-header",
     "--postprocessor-args",
     "--downloader-args",
+    // Proxy must only be configured through the trusted settings layer
+    // (which applies a user-approved allow-list). Allowing it via arbitrary
+    // extra_flags would let a malicious playlist bypass the configured proxy
+    // and exfiltrate traffic or reach internal endpoints directly.
+    "--proxy",
 ];
 
 /// Validate user-supplied custom yt-dlp arguments. Rejects flags that could

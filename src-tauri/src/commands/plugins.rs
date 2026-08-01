@@ -364,11 +364,37 @@ struct GitHubAsset {
     browser_download_url: String,
 }
 
+/// Repositories OmniGet is willing to install plugins from.
+///
+/// SECURITY (supply chain): plugins are loaded into the Tauri runtime with
+/// full IPC access, so a malicious plugin equals arbitrary code execution on
+/// the user's machine. We therefore restrict installation to a small, pinned
+/// allow-list of trusted publishers. A repository not on this list is rejected
+/// outright — this is the primary defense against a compromised or
+/// typo-squatted release publisher, and complements the per-release `.sha256`
+/// integrity check.
+const TRUSTED_REPOS: &[&str] = &["tonhowtf/omniget-plugins"];
+
+/// Returns an error unless `repo` is in the trusted allow-list.
+fn ensure_repo_trusted(repo: &str) -> Result<(), String> {
+    if TRUSTED_REPOS.contains(&repo) {
+        Ok(())
+    } else {
+        Err(format!(
+            "Refused to install plugin from untrusted repository '{}'. \
+             Only these repositories are allowed: {}",
+            repo,
+            TRUSTED_REPOS.join(", ")
+        ))
+    }
+}
+
 pub async fn install_plugin_zip_from_repo(
     state: &Arc<tokio::sync::RwLock<PluginManager>>,
     plugin_id: String,
     repo: String,
 ) -> Result<String, String> {
+    ensure_repo_trusted(&repo)?;
     let suffix = platform_artifact_suffix();
     if suffix == "unknown" {
         return Err("Unsupported platform".to_string());
@@ -410,12 +436,15 @@ pub async fn install_plugin_zip_from_repo(
 
     // Verify integrity if the release publishes a .sha256 file for the zip asset.
     //
-    // SECURITY NOTE (trust boundary): the .sha256 checksum and the zip asset are
-    // both served from the same GitHub release, so this check protects against
-    // transport/corruption and accidental tampering, but NOT against a fully
-    // compromised release publisher. For stronger supply-chain guarantees, the
-    // release should additionally be signed by a trusted publisher and verified
-    // out-of-band (e.g. via a pinned public key) before installation.
+    // SECURITY (two-layer supply-chain defense):
+    //   1. The repository itself was already validated by `ensure_repo_trusted`
+    //      at the entry of this function (see `TRUSTED_REPOS`), so only a pinned
+    //      allow-list of trusted publishers can reach this point.
+    //   2. The .sha256 checksum (served from the same release) guards against
+    //      transport corruption and accidental tampering.
+    // Together these bound the trust to a known publisher and protect integrity;
+    // a fully compromised *trusted* publisher is out of scope for client-side
+    // enforcement, which is why the allow-list is intentionally tiny.
     use omniget_core::core::dependencies::integrity;
     let checksum_asset_name = format!("{}.sha256", asset.name);
     if let Some(cs) = release.assets.iter().find(|a| a.name == checksum_asset_name) {

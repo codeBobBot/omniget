@@ -320,9 +320,27 @@ async fn download_single_stream(
     // file) from redirecting the write outside the download directory.
     let _ = std::fs::remove_file(part_path);
     let raw_file = if offset > 0 {
+        // Resume: the file already exists from a prior attempt; append to it.
+        // Opening by path (not create_new) is intentional here — we are
+        // extending an existing, already-validated .part file.
         std::fs::OpenOptions::new().append(true).open(part_path)?
     } else {
-        std::fs::File::create(part_path)?
+        // Fresh download: use create_new so a symlink re-planted in the race
+        // window between remove_file and open fails the open instead of
+        // redirecting the write outside the download directory.
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(part_path)
+            .map_err(|e| {
+                std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Refusing to write .part — path already exists or is a symlink: {}",
+                        e
+                    ),
+                )
+            })?
     };
 
     let mut file = std::io::BufWriter::with_capacity(256 * 1024, raw_file);

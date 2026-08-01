@@ -705,6 +705,8 @@ fn sanitize_extra_flags(extra_flags: &[String]) -> Vec<String> {
         "--add-header",
         "--postprocessor-args",
         "--downloader-args",
+        // Proxy must only be configured via the trusted settings layer.
+        "--proxy",
     ];
     let mut clean = Vec::with_capacity(extra_flags.len());
     for flag in extra_flags {
