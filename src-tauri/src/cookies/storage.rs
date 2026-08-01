@@ -89,7 +89,8 @@ pub fn trash_dir() -> PathBuf {
 
 fn safe_domain_segment(domain: &str) -> String {
     let h = domain.trim_start_matches('.').to_lowercase();
-    h.chars()
+    let filtered: String = h
+        .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
                 c
@@ -97,7 +98,13 @@ fn safe_domain_segment(domain: &str) -> String {
                 '_'
             }
         })
-        .collect()
+        .collect();
+    // SECURITY: a cookie domain is a single host label (e.g. "youtube.com") and
+    // must never contain a parent-directory component. Without this, a domain
+    // of ".." would survive the char filter ('.' is allowed) and let
+    // `bucket_dir` escape the cookies root via `cookies_root().join("..")`,
+    // enabling cross-directory file reads/moves. Replace ".." sequences.
+    filtered.replace("..", "_")
 }
 
 fn safe_slug_segment(slug: &str) -> String {

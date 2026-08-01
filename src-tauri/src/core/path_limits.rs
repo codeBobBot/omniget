@@ -125,11 +125,14 @@ pub fn validate_read_path(path: &str) -> Result<(), String> {
 }
 
 /// yt-dlp flags that are dangerous because they allow arbitrary command
-/// execution or writing to attacker-controlled paths.
+/// execution, disabling TLS verification, or writing to attacker-controlled
+/// paths. Kept aligned with `sanitize_extra_flags` in omniget-core so both the
+/// IPC entry point and the core download path reject the same dangerous set.
 const BANNED_YTDLP_FLAGS: &[&str] = &[
     "--exec",
     "--exec-after-download",
     "--exec-before-download",
+    "-exec",
     "--print",
     "--print-to-file",
     "--output",
@@ -137,9 +140,18 @@ const BANNED_YTDLP_FLAGS: &[&str] = &[
     "--paths",
     "-P",
     "--config-location",
+    "--config-locations",
+    "--config",
+    "-a",
+    "--batch-file",
     "--load-info-json",
     "--cookies",
     "--cookies-from-browser",
+    "--no-check-certificates",
+    "--python",
+    "--add-header",
+    "--postprocessor-args",
+    "--downloader-args",
 ];
 
 /// Validate user-supplied custom yt-dlp arguments. Rejects flags that could

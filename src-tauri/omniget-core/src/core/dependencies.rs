@@ -556,6 +556,10 @@ async fn extract_zip_ffmpeg(
             let name = entry.name().to_string();
             for target in &targets {
                 if name.ends_with(target) {
+                    // SECURITY: the destination uses a fixed filename derived from
+                    // `target`, NOT `entry.name()`. This prevents Zip Slip even if the
+                    // archive contains `../../` paths. Do NOT change this to write to
+                    // `entry.name()` without adding `entry.enclosed_name()` validation.
                     let dest = bin_dir.join(format!("{}.new", target));
                     let mut out = std::fs::File::create(&dest)?;
                     std::io::copy(&mut entry, &mut out)?;

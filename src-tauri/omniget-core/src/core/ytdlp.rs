@@ -681,13 +681,55 @@ fn metadata_cookie_source(url: &str, extra_flags: &[String]) -> MetadataCookieSo
     MetadataCookieSource::None
 }
 
+/// Defense-in-depth: validate `extra_flags` before passing them to yt-dlp.
+///
+/// The IPC entry point (`commands/downloads.rs`) already validates these, but
+/// `extra_flags` flows through the core layer which may be invoked by future
+/// code paths. We reject any flag that could escape the sandboxed download
+/// flow (arbitrary command execution, output redirection, or disabling TLS
+/// verification outside of the explicit `insecure_tls` setting).
+fn sanitize_extra_flags(extra_flags: &[String]) -> Vec<String> {
+    const FORBIDDEN: &[&str] = &[
+        "--exec",
+        "-exec",
+        "--output",
+        "-o",
+        "--no-check-certificates",
+        "--config-locations",
+        "--config",
+        "-a",
+        "--batch-file",
+        "--python",
+        "--cookies",
+        "--cookies-from-browser",
+        "--add-header",
+        "--postprocessor-args",
+        "--downloader-args",
+    ];
+    let mut clean = Vec::with_capacity(extra_flags.len());
+    for flag in extra_flags {
+        let base = flag
+            .split(['=', ' '])
+            .next()
+            .unwrap_or(flag.as_str())
+            .to_lowercase();
+        if FORBIDDEN.contains(&base.as_str()) {
+            tracing::warn!("[ytdlp] rejected unsafe extra flag: {}", flag);
+            continue;
+        }
+        clean.push(flag.clone());
+    }
+    clean
+}
+
 fn append_metadata_cookie_args(
     args: &mut Vec<String>,
     url: &str,
     extra_flags: &[String],
     context: &str,
 ) {
-    match metadata_cookie_source(url, extra_flags) {
+    let extra_flags = sanitize_extra_flags(extra_flags);
+    match metadata_cookie_source(url, &extra_flags) {
         MetadataCookieSource::PerDomain(path) => {
             args.push("--cookies".to_string());
             args.push(path.to_string_lossy().to_string());
@@ -1395,7 +1437,7 @@ pub async fn get_video_info(
             args.push("--proxy".to_string());
             args.push(proxy_url);
         }
-        args.extend(extra_flags.iter().cloned());
+        args.extend(sanitize_extra_flags(extra_flags));
         args.push("--".to_string());
         args.push(url.to_string());
 
@@ -1659,7 +1701,7 @@ pub async fn get_playlist_info(
     append_metadata_cookie_args(&mut args, url, extra_flags, "playlist info");
 
     args.extend(proxy_args());
-    args.extend(extra_flags.iter().cloned());
+    args.extend(sanitize_extra_flags(extra_flags));
     args.push("--".to_string());
     args.push(url.to_string());
 
@@ -2305,7 +2347,7 @@ pub async fn download_video(
     ]);
 
     base_args.extend(proxy_args());
-    base_args.extend(extra_flags.iter().cloned());
+    base_args.extend(sanitize_extra_flags(extra_flags));
 
     if let Some(lang) = translate_metadata_lang() {
         base_args.push("--extractor-args".to_string());

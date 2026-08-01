@@ -409,6 +409,13 @@ pub async fn install_plugin_zip_from_repo(
         .map_err(|e| format!("NetworkUnreachable|Failed to read download: {}", e))?;
 
     // Verify integrity if the release publishes a .sha256 file for the zip asset.
+    //
+    // SECURITY NOTE (trust boundary): the .sha256 checksum and the zip asset are
+    // both served from the same GitHub release, so this check protects against
+    // transport/corruption and accidental tampering, but NOT against a fully
+    // compromised release publisher. For stronger supply-chain guarantees, the
+    // release should additionally be signed by a trusted publisher and verified
+    // out-of-band (e.g. via a pinned public key) before installation.
     use omniget_core::core::dependencies::integrity;
     let checksum_asset_name = format!("{}.sha256", asset.name);
     if let Some(cs) = release.assets.iter().find(|a| a.name == checksum_asset_name) {
