@@ -515,6 +515,8 @@ fn is_private_host(url: &str) -> bool {
         || host.ends_with(".svc")
         || host.ends_with(".svc.cluster.local")
 }
+
+fn resolve_url(base: &str, relative: &str) -> String {
     if relative.starts_with("http://") || relative.starts_with("https://") {
         // SECURITY: reject requests to private/link-local/loopback/metadata
         // addresses to prevent blind SSRF from a malicious m3u8 playlist.
