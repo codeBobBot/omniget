@@ -2044,6 +2044,18 @@ pub async fn download_video(
     );
 
     let format_selector = if let Some(fid) = format_id {
+        // SECURITY: `format_id` is user-controlled (FormatSelector). While it
+        // is passed as a single argv value (no shell injection), restrict it to
+        // a safe character set to avoid confusing yt-dlp's `-f` parser or
+        // smuggling option-like tokens.
+        if !fid
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "+-_./[]{}".contains(c))
+        {
+            return Err(anyhow::anyhow!(
+                "Invalid characters in format_id: only alphanumerics and + - _ . / [ ] {{}} are allowed"
+            ));
+        }
         if let Some(h) = quality_height.filter(|h| *h > 0) {
             let fallback = match mode {
                 "audio" => "ba/b".to_string(),
