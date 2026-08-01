@@ -461,6 +461,15 @@ pub async fn install_plugin_zip_from_repo(
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        // Security: reject symlink/hardlink entries. `ZipFile` does not
+        // auto-dereference, but writing via `File::create` on the symlink's
+        // target would let a malicious zip overwrite files inside or outside
+        // the plugin directory (depending on the symlink target). Plugins must
+        // ship regular files only.
+        if file.is_symlink() {
+            tracing::warn!("[plugins] skipping symlink entry in zip: {:?}", file.name());
+            continue;
+        }
         // Security: enclosed_name() prevents Zip Slip via ".." components
         let outpath = plugin_dir.join(
             file.enclosed_name()

@@ -112,7 +112,12 @@ impl PlatformDownloader for MagnetDownloader {
                 if guard.is_some() {
                     tracing::info!("[magnet] output dir changed, recreating session");
                 }
-                let listen_port = opts.torrent_listen_port.unwrap_or(6881).min(65525);
+                // clamp to a valid, bindable TCP port range (1..=65535),
+                // avoiding privileged ports (<1024) which would fail to bind.
+                let listen_port = opts
+                    .torrent_listen_port
+                    .unwrap_or(6881)
+                    .clamp(1024, 65525);
                 tracing::info!(
                     "[magnet] creating shared session, port: {}, output: {}",
                     listen_port,
