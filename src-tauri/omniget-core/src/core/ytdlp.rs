@@ -1690,6 +1690,10 @@ pub async fn get_playlist_info(
         "exp=1:15".to_string(),
         "--user-agent".to_string(),
         CHROME_UA.to_string(),
+        // Bound the number of parsed entries to avoid resource-exhaustion DoS
+        // when a user (or attacker-controlled content) submits a huge playlist.
+        "--playlist-end".to_string(),
+        "50".to_string(),
     ];
     args.extend(js_runtime_args());
 

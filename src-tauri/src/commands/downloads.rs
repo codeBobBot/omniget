@@ -431,6 +431,9 @@ pub async fn thumbnail_save(
     file_name: String,
 ) -> Result<String, String> {
     path_limits::validate_output_dir_safe(&output_dir)?;
+    if omniget_core::core::url_safety::is_private_host(&thumb_url) {
+        return Err("Blocked request to non-public address".into());
+    }
     let client = crate::core::http_client::apply_global_proxy(reqwest::Client::builder())
         .build()
         .map_err(|e| e.to_string())?;
@@ -574,6 +577,9 @@ pub async fn subtitles_save(
     file_name: String,
 ) -> Result<String, String> {
     path_limits::validate_output_dir_safe(&output_dir)?;
+    if omniget_core::core::url_safety::is_private_host(&sub_url) {
+        return Err("Blocked request to non-public address".into());
+    }
     let client = crate::core::http_client::apply_global_proxy(reqwest::Client::builder())
         .build()
         .map_err(|e| e.to_string())?;
@@ -599,6 +605,11 @@ pub async fn subtitles_merge(
     file_name: String,
 ) -> Result<String, String> {
     path_limits::validate_output_dir_safe(&output_dir)?;
+    if omniget_core::core::url_safety::is_private_host(&primary_url)
+        || omniget_core::core::url_safety::is_private_host(&secondary_url)
+    {
+        return Err("Blocked request to non-public address".into());
+    }
     let client = crate::core::http_client::apply_global_proxy(reqwest::Client::builder())
         .build()
         .map_err(|e| e.to_string())?;
