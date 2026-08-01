@@ -313,6 +313,12 @@ async fn download_single_stream(
     }
 
     use std::io::Write;
+    // SECURITY: before creating the temporary `.part` file, unlink any
+    // pre-existing entry at that path. `std::fs::remove_file` deletes a
+    // symlink itself rather than following it, so this prevents a local
+    // attacker who pre-planted a symlink (e.g. `<name>.part` -> sensitive
+    // file) from redirecting the write outside the download directory.
+    let _ = std::fs::remove_file(part_path);
     let raw_file = if offset > 0 {
         std::fs::OpenOptions::new().append(true).open(part_path)?
     } else {

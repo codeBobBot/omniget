@@ -23,7 +23,14 @@ pub fn update_settings(app: tauri::AppHandle, partial: String) -> Result<AppSett
         serde_json::from_str(&partial).map_err(|e| format!("Invalid JSON: {}", e))?;
     let mut current_val =
         serde_json::to_value(&current).map_err(|e| format!("Serialize: {}", e))?;
-    merge_json(&mut current_val, &patch);
+    // SECURITY: strip sensitive fields from the patch before merging. These
+    // settings change the trust boundary (TLS verification, outbound proxy,
+    // the localhost pairing bridge, and Discord RPC identity) and must only be
+    // changed through their dedicated UI controls, never via a bare import /
+    // `update_settings` payload that could be supplied by an untrusted source
+    // (e.g. a malicious settings file or a compromised frontend).
+    let safe_patch = strip_sensitive_fields(&patch);
+    merge_json(&mut current_val, &safe_patch);
     current = serde_json::from_value(current_val).map_err(|e| format!("Deserialize: {}", e))?;
     config::save_settings(&app, &current).map_err(|e| format!("Save: {}", e))?;
 
@@ -163,5 +170,36 @@ fn merge_json(base: &mut serde_json::Value, patch: &serde_json::Value) {
                 base_obj.insert(key.clone(), value.clone());
             }
         }
+    }
+}
+
+/// Settings keys whose values change the security trust boundary and must
+/// never be set through a generic `update_settings`/`import` payload.
+const SENSITIVE_SETTINGS_KEYS: &[&str] = &[
+    "insecure_tls", // under `advanced`: disables TLS verification
+    "proxy",        // redirects all outbound traffic
+    "bridge",       // localhost pairing bearer + port
+    "rpc",          // Discord RPC identity
+];
+
+/// Recursively removes `SENSITIVE_SETTINGS_KEYS` from a settings patch so they
+/// cannot be injected by an untrusted `update_settings` / import payload.
+fn strip_sensitive_fields(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                if SENSITIVE_SETTINGS_KEYS.contains(&k.as_str()) {
+                    tracing::warn!("[settings] rejected sensitive field in update_settings: {k}");
+                    continue;
+                }
+                out.insert(k.clone(), strip_sensitive_fields(v));
+            }
+            serde_json::Value::Object(out)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(strip_sensitive_fields).collect())
+        }
+        other => other.clone(),
     }
 }

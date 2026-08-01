@@ -489,38 +489,11 @@ fn select_best_variant(master: &MasterPlaylist, max_height: u32) -> Option<&Vari
     best.or_else(|| sorted.first().copied())
 }
 
-/// Returns true if the absolute URL points at a non-public address
-/// (loopback, private RFC1918, link-local, or cloud metadata endpoints).
-/// Used to block blind SSRF via malicious HLS playlists. Only triggers for
-/// http(s) URLs with a parseable host; anything unparseable is treated as
-/// public so we never accidentally block legitimate CDN content.
-fn is_private_host(url: &str) -> bool {
-    let host = match url::Url::parse(url).ok().and_then(|u| u.host_str().map(|h| h.to_string())) {
-        Some(h) => h,
-        None => return false,
-    };
-    let host = host.trim_start_matches('[').trim_end_matches(']');
-
-    // cloud metadata endpoints
-    if host == "169.254.169.254" {
-        return true;
-    }
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        return ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified();
-    }
-    // hostnames that resolve to private ranges (defense in depth)
-    host == "localhost"
-        || host.ends_with(".local")
-        || host.ends_with(".internal")
-        || host.ends_with(".svc")
-        || host.ends_with(".svc.cluster.local")
-}
-
 fn resolve_url(base: &str, relative: &str) -> String {
     if relative.starts_with("http://") || relative.starts_with("https://") {
         // SECURITY: reject requests to private/link-local/loopback/metadata
         // addresses to prevent blind SSRF from a malicious m3u8 playlist.
-        if is_private_host(relative) {
+        if crate::core::url_safety::is_private_host(relative) {
             tracing::warn!("[hls] refusing to resolve private host in playlist: {relative}");
             return String::new();
         }
@@ -552,6 +525,10 @@ async fn write_segments_ordered(
     total_segments: usize,
 ) -> anyhow::Result<()> {
     use std::io::Write;
+    // SECURITY: unlink any pre-existing entry (including a planted symlink)
+    // before creating the merged output, so the write cannot be redirected
+    // outside the download directory via a symlink.
+    let _ = std::fs::remove_file(output_path);
     let mut file =
         std::io::BufWriter::with_capacity(256 * 1024, std::fs::File::create(output_path)?);
     let mut next_expected: usize = 0;

@@ -307,6 +307,10 @@ impl HttpFetcher {
         part_path: &Path,
         progress_tx: &mpsc::Sender<ProgressUpdate>,
     ) -> anyhow::Result<HttpFetcherResult> {
+        // SECURITY: unlink any pre-existing entry at `part_path` before
+        // downloading. `remove_file` deletes a symlink itself (not its target),
+        // preventing a locally pre-planted symlink from redirecting the write
+        // outside the download directory (TOCTOU / symlink attack).
         let _ = tokio::fs::remove_file(part_path).await;
 
         let mut req = self.client.get(&self.url);

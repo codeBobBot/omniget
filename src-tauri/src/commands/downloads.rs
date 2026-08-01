@@ -310,7 +310,11 @@ pub async fn metadata_fetch(
     }
 
     if let Some(thumb) = json.get("thumbnail").and_then(|v| v.as_str()) {
-        if let Ok(client) =
+        // SECURITY: block blind SSRF — refuse to fetch thumbnails from private
+        // / loopback / link-local / cloud-metadata hosts.
+        if omniget_core::core::url_safety::is_private_host(thumb) {
+            tracing::warn!("[metadata] refusing thumbnail fetch to private host: {thumb}");
+        } else if let Ok(client) =
             crate::core::http_client::apply_global_proxy(reqwest::Client::builder()).build()
         {
             match client.get(thumb).send().await {
