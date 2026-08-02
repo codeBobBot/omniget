@@ -742,16 +742,15 @@ pub fn is_forbidden_ytdlp_flag(flag: &str) -> bool {
 /// (or an XSS'd webview that called `update_settings`) write arbitrary files
 /// outside the chosen download directory. We reject any value containing path
 /// separators, parent-dir references, a leading `/` (absolute), or NUL.
-pub fn validate_filename_template(template: &str) -> Result<(), String> {
+pub fn validate_filename_template(template: &str) -> anyhow::Result<()> {
     if template.is_empty() {
         return Ok(());
     }
     if template.contains("..")
         || template.contains(|c: char| c == '\0' || c == '/' || c == '\\' || c == ':')
     {
-        return Err(
+        anyhow::bail!(
             "Filename template must not contain path separators or parent-dir references"
-                .to_string(),
         );
     }
     // Also reject the literal parent-dir sequence split across percent fields.
@@ -759,7 +758,7 @@ pub fn validate_filename_template(template: &str) -> Result<(), String> {
         .split('%')
         .any(|seg| seg.contains("..") || seg.starts_with('/') || seg.starts_with('\\'))
     {
-        return Err("Filename template must not escape the download directory".to_string());
+        anyhow::bail!("Filename template must not escape the download directory");
     }
     Ok(())
 }
