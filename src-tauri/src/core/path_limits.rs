@@ -145,9 +145,9 @@ pub fn validate_filename_template(template: &str) -> Result<(), String> {
         return Ok(());
     }
     // Reject NUL and path separators up front (covers `\` on Windows too).
-    if template.contains(|c: char| {
-        c == '\0' || c == '/' || c == '\\' || c == ':' || c == '..'
-    }) {
+    if template.contains("..")
+        || template.contains(|c: char| c == '\0' || c == '/' || c == '\\' || c == ':')
+    {
         return Err(
             "Filename template must not contain path separators or parent-dir references"
                 .to_string(),

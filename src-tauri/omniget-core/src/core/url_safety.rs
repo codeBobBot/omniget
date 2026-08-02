@@ -19,7 +19,10 @@ pub fn is_private_host(url: &str) -> bool {
         return true;
     }
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        return ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified();
+        match ip {
+            std::net::IpAddr::V4(v4) => return v4.is_loopback() || v4.is_private() || v4.is_link_local() || v4.is_unspecified(),
+            std::net::IpAddr::V6(v6) => return v6.is_loopback() || v6.is_unspecified(),
+        }
     }
     // hostnames that resolve to private ranges (defense in depth)
     host == "localhost"

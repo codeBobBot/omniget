@@ -236,7 +236,7 @@ async fn health() -> Json<HealthResponse> {
 
 /// Seconds the pairing window stays open after the user clicks "Pair" in the
 /// app. The window is single-use (closed on the first successful hand-out).
-pub const PAIR_WINDOW_SECS: i64 = 120;
+pub const PAIR_WINDOW_SECS: i64 = 30;
 
 /// Unix-ms deadline until which `GET /v1/pair` will return the token.
 /// `0` means the pairing window is closed.

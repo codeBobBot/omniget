@@ -18,7 +18,7 @@ pub async fn subtitle_load(path: String) -> Result<Vec<Cue>, String> {
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub async fn subtitle_save(path: String, cues: Vec<Cue>, format: String) -> Result<(), String> {
-    path_limits::validate_output_dir_safe(&path, "subtitle save")?;
+    path_limits::validate_output_dir_safe(&path)?;
     let body = match format.as_str() {
         "vtt" => subtitle_merge::cues_to_vtt(&cues),
         "ass" => subtitle_merge::cues_to_ass(&cues),
