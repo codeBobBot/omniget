@@ -733,6 +733,37 @@ pub fn is_forbidden_ytdlp_flag(flag: &str) -> bool {
     FORBIDDEN_YTDLP_FLAGS.contains(&base.as_str())
 }
 
+/// Validate a user-supplied filename template (the per-download `%(...)` naming
+/// pattern that becomes the `-o` argument to yt-dlp).
+///
+/// SECURITY: this template is concatenated onto `output_dir` and handed to
+/// yt-dlp as the output path. A malicious value such as
+/// `../../../../etc/cron.d/x.%(ext)s` would let a compromised settings layer
+/// (or an XSS'd webview that called `update_settings`) write arbitrary files
+/// outside the chosen download directory. We reject any value containing path
+/// separators, parent-dir references, a leading `/` (absolute), or NUL.
+pub fn validate_filename_template(template: &str) -> Result<(), String> {
+    if template.is_empty() {
+        return Ok(());
+    }
+    if template.contains("..")
+        || template.contains(|c: char| c == '\0' || c == '/' || c == '\\' || c == ':')
+    {
+        return Err(
+            "Filename template must not contain path separators or parent-dir references"
+                .to_string(),
+        );
+    }
+    // Also reject the literal parent-dir sequence split across percent fields.
+    if template
+        .split('%')
+        .any(|seg| seg.contains("..") || seg.starts_with('/') || seg.starts_with('\\'))
+    {
+        return Err("Filename template must not escape the download directory".to_string());
+    }
+    Ok(())
+}
+
 /// Defense-in-depth: validate `extra_flags` before passing them to yt-dlp.
 ///
 /// The IPC entry point (`commands/downloads.rs`) already validates these, but
@@ -2149,7 +2180,7 @@ pub async fn download_video(
     // output_dir. Reject any template that could escape the download directory
     // (e.g. `../../etc/cron.d/x`), which would otherwise let a malicious
     // settings value write arbitrary files on disk.
-    path_limits::validate_filename_template(&template)?;
+    validate_filename_template(&template)?;
     let output_template = output_dir.join(&template).to_string_lossy().to_string();
 
     std::fs::create_dir_all(output_dir)?;
