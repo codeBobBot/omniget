@@ -2145,6 +2145,11 @@ pub async fn download_video(
     let template = filename_template
         .map(|t| t.to_string())
         .unwrap_or_else(|| format!("%(title).{}s [%(id)s].%(ext)s", max_name));
+    // SECURITY: the template becomes the `-o` argument after being joined onto
+    // output_dir. Reject any template that could escape the download directory
+    // (e.g. `../../etc/cron.d/x`), which would otherwise let a malicious
+    // settings value write arbitrary files on disk.
+    path_limits::validate_filename_template(&template)?;
     let output_template = output_dir.join(&template).to_string_lossy().to_string();
 
     std::fs::create_dir_all(output_dir)?;

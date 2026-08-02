@@ -131,6 +131,40 @@ pub fn validate_read_path(path: &str) -> Result<(), String> {
 /// stay in sync (we re-export it here so there is a single source of truth).
 const BANNED_YTDLP_FLAGS: &[&str] = omniget_core::core::ytdlp::FORBIDDEN_YTDLP_FLAGS;
 
+/// Validate a user-supplied filename template (the per-download `%(...)` naming
+/// pattern that becomes the `-o` argument to yt-dlp).
+///
+/// SECURITY: this template is concatenated onto `output_dir` and handed to
+/// yt-dlp as the output path. A malicious value such as
+/// `../../../../etc/cron.d/x.%(ext)s` would let a compromised settings layer
+/// (or an XSS'd webview that called `update_settings`) write arbitrary files
+/// outside the chosen download directory. We reject any value containing path
+/// separators, parent-dir references, a leading `/` (absolute), or NUL.
+pub fn validate_filename_template(template: &str) -> Result<(), String> {
+    if template.is_empty() {
+        return Ok(());
+    }
+    // Reject NUL and path separators up front (covers `\` on Windows too).
+    if template.contains(|c: char| {
+        c == '\0' || c == '/' || c == '\\' || c == ':' || c == '..'
+    }) {
+        return Err(
+            "Filename template must not contain path separators or parent-dir references"
+                .to_string(),
+        );
+    }
+    // Also reject the literal parent-dir sequence split across percent fields.
+    if template
+        .split('%')
+        .any(|seg| seg.contains("..") || seg.starts_with('/') || seg.starts_with('\\'))
+    {
+        return Err(
+            "Filename template must not escape the download directory".to_string(),
+        );
+    }
+    Ok(())
+}
+
 /// Validate user-supplied custom yt-dlp arguments. Rejects flags that could
 /// lead to arbitrary command execution (--exec) or path manipulation.
 pub fn validate_custom_ytdlp_args(args: &[String]) -> Result<(), String> {
