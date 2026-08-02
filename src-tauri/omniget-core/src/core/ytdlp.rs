@@ -681,6 +681,58 @@ fn metadata_cookie_source(url: &str, extra_flags: &[String]) -> MetadataCookieSo
     MetadataCookieSource::None
 }
 
+/// yt-dlp flags that must never be supplied by user-controlled input
+/// (`extra_flags`, persisted templates, etc.). Rejecting them is the core
+/// defense against escaping the sandboxed download flow: arbitrary command
+/// execution (`--exec`/`--exec-after-download`), output redirection to
+/// arbitrary paths (`--output`/`-o`/`--paths`), disabling TLS verification
+/// outside the explicit `insecure_tls` setting, loading arbitrary
+/// config/batch/info files, writing to arbitrary files (`--print-to-file`),
+/// or bypassing the trusted proxy layer.
+///
+/// This is the single source of truth. The IPC-layer `BANNED_YTDLP_FLAGS`
+/// (in `path_limits.rs`) also references this list for defense-in-depth; any
+/// new dangerous flag must be added here so both layers stay consistent.
+pub const FORBIDDEN_YTDLP_FLAGS: &[&str] = &[
+    "--exec",
+    "--exec-after-download",
+    "--exec-before-download",
+    "-exec",
+    "--print",
+    "--print-to-file",
+    "--output",
+    "-o",
+    "--paths",
+    "-P",
+    "--config-location",
+    "--config-locations",
+    "--config",
+    "-a",
+    "--batch-file",
+    "--load-info-json",
+    "--python",
+    "--cookies",
+    "--cookies-from-browser",
+    "--no-check-certificates",
+    "--add-header",
+    "--postprocessor-args",
+    "--downloader-args",
+    // Proxy must only be configured via the trusted settings layer.
+    "--proxy",
+];
+
+/// Returns true if `flag` matches (the base of) a forbidden yt-dlp flag.
+/// `flag` may carry an inline `=value` or ` value` suffix, which is stripped
+/// before comparison.
+pub fn is_forbidden_ytdlp_flag(flag: &str) -> bool {
+    let base = flag
+        .split(['=', ' '])
+        .next()
+        .unwrap_or(flag)
+        .to_lowercase();
+    FORBIDDEN_YTDLP_FLAGS.contains(&base.as_str())
+}
+
 /// Defense-in-depth: validate `extra_flags` before passing them to yt-dlp.
 ///
 /// The IPC entry point (`commands/downloads.rs`) already validates these, but
@@ -689,33 +741,9 @@ fn metadata_cookie_source(url: &str, extra_flags: &[String]) -> MetadataCookieSo
 /// flow (arbitrary command execution, output redirection, or disabling TLS
 /// verification outside of the explicit `insecure_tls` setting).
 fn sanitize_extra_flags(extra_flags: &[String]) -> Vec<String> {
-    const FORBIDDEN: &[&str] = &[
-        "--exec",
-        "-exec",
-        "--output",
-        "-o",
-        "--no-check-certificates",
-        "--config-locations",
-        "--config",
-        "-a",
-        "--batch-file",
-        "--python",
-        "--cookies",
-        "--cookies-from-browser",
-        "--add-header",
-        "--postprocessor-args",
-        "--downloader-args",
-        // Proxy must only be configured via the trusted settings layer.
-        "--proxy",
-    ];
     let mut clean = Vec::with_capacity(extra_flags.len());
     for flag in extra_flags {
-        let base = flag
-            .split(['=', ' '])
-            .next()
-            .unwrap_or(flag.as_str())
-            .to_lowercase();
-        if FORBIDDEN.contains(&base.as_str()) {
+        if is_forbidden_ytdlp_flag(flag) {
             tracing::warn!("[ytdlp] rejected unsafe extra flag: {}", flag);
             continue;
         }

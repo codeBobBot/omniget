@@ -65,6 +65,18 @@ pub fn yt_templates_save(request: SaveRequest) -> Result<YtTemplate, String> {
     if name.is_empty() {
         return Err("Template name cannot be empty".to_string());
     }
+    // SECURITY: saved templates are later executed verbatim as yt-dlp arguments
+    // by the download pipeline. Reject any argument that appears in the shared
+    // forbidden list (e.g. `--exec`, `--no-check-certificates`, `--proxy`),
+    // otherwise a persisted template would bypass the `extra_flags` sanitizer
+    // and allow arbitrary command execution or arbitrary file writes.
+    for arg in &request.args {
+        if omniget_core::core::ytdlp::is_forbidden_ytdlp_flag(arg) {
+            return Err(format!(
+                "Template argument not allowed (matches blocked yt-dlp flag): {arg}"
+            ));
+        }
+    }
     let now = now_ms();
     let mut store = load();
     let id = request.id.unwrap_or_else(|| format!("tpl-{}", now));

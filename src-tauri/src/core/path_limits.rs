@@ -126,38 +126,10 @@ pub fn validate_read_path(path: &str) -> Result<(), String> {
 
 /// yt-dlp flags that are dangerous because they allow arbitrary command
 /// execution, disabling TLS verification, or writing to attacker-controlled
-/// paths. Kept aligned with `sanitize_extra_flags` in omniget-core so both the
-/// IPC entry point and the core download path reject the same dangerous set.
-const BANNED_YTDLP_FLAGS: &[&str] = &[
-    "--exec",
-    "--exec-after-download",
-    "--exec-before-download",
-    "-exec",
-    "--print",
-    "--print-to-file",
-    "--output",
-    "-o",
-    "--paths",
-    "-P",
-    "--config-location",
-    "--config-locations",
-    "--config",
-    "-a",
-    "--batch-file",
-    "--load-info-json",
-    "--cookies",
-    "--cookies-from-browser",
-    "--no-check-certificates",
-    "--python",
-    "--add-header",
-    "--postprocessor-args",
-    "--downloader-args",
-    // Proxy must only be configured through the trusted settings layer
-    // (which applies a user-approved allow-list). Allowing it via arbitrary
-    // extra_flags would let a malicious playlist bypass the configured proxy
-    // and exfiltrate traffic or reach internal endpoints directly.
-    "--proxy",
-];
+/// paths. This is the IPC-layer defense-in-depth check; the authoritative list
+/// lives in `omniget_core::core::ytdlp::FORBIDDEN_YTDLP_FLAGS` and the two must
+/// stay in sync (we re-export it here so there is a single source of truth).
+const BANNED_YTDLP_FLAGS: &[&str] = omniget_core::core::ytdlp::FORBIDDEN_YTDLP_FLAGS;
 
 /// Validate user-supplied custom yt-dlp arguments. Rejects flags that could
 /// lead to arbitrary command execution (--exec) or path manipulation.
