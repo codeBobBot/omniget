@@ -856,6 +856,7 @@ fn yt_rate_limiter() -> &'static YtRateLimiter {
 
 const CHROME_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 pub const VIDEO_INFO_PROCESS_TIMEOUT_SECS: u64 = 90;
+pub const BILIBILI_VIDEO_INFO_PROCESS_TIMEOUT_SECS: u64 = 150;
 pub const YOUTUBE_VIDEO_INFO_TOTAL_TIMEOUT_SECS: u64 = 190;
 pub const DEFAULT_VIDEO_INFO_TOTAL_TIMEOUT_SECS: u64 = 110;
 
@@ -1405,6 +1406,11 @@ fn is_youtube_url(url: &str) -> bool {
     lower.contains("youtube.com") || lower.contains("youtu.be")
 }
 
+fn is_bilibili_url(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    lower.contains("bilibili.com") || lower.contains("b23.tv")
+}
+
 /// Extracts the most meaningful error line from yt-dlp stderr output.
 /// Prefers lines starting with "ERROR:", falls back to "WARNING:", then raw trimmed output.
 fn extract_error_message(stderr: &str) -> String {
@@ -1463,11 +1469,15 @@ pub async fn get_video_info(
             "--encoding".to_string(),
             "utf-8".to_string(),
             "--socket-timeout".to_string(),
-            "15".to_string(),
+            // Bilibili's metadata extraction does many network round-trips
+            // (playapi, WBI signing, play-page HTML); the default 15s socket
+            // timeout is too short and causes the whole fetch to stall until
+            // the process timeout. Use a longer socket timeout for it.
+            if is_bilibili_url(url) { "30" } else { "15" }.to_string(),
             "--retries".to_string(),
-            "1".to_string(),
+            if is_bilibili_url(url) { "3" } else { "1" }.to_string(),
             "--extractor-retries".to_string(),
-            "2".to_string(),
+            if is_bilibili_url(url) { "3" } else { "2" }.to_string(),
             "--retry-sleep".to_string(),
             "exp=1:30".to_string(),
             "--user-agent".to_string(),
@@ -1514,8 +1524,13 @@ pub async fn get_video_info(
             attempt + 1
         );
 
+        let process_timeout_secs = if is_bilibili_url(url) {
+            BILIBILI_VIDEO_INFO_PROCESS_TIMEOUT_SECS
+        } else {
+            VIDEO_INFO_PROCESS_TIMEOUT_SECS
+        };
         let result = tokio::time::timeout(
-            std::time::Duration::from_secs(VIDEO_INFO_PROCESS_TIMEOUT_SECS),
+            std::time::Duration::from_secs(process_timeout_secs),
             child.wait_with_output(),
         )
         .await
@@ -1523,7 +1538,7 @@ pub async fn get_video_info(
             tracing::debug!("[perf] get_video_info took {:?}", _timer_start.elapsed());
             anyhow!(
                 "Timeout fetching video info ({}s)",
-                VIDEO_INFO_PROCESS_TIMEOUT_SECS
+                process_timeout_secs
             )
         })?
         .map_err(|e| {
