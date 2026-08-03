@@ -90,7 +90,39 @@
   border-right: 1px solid var(--border);
   padding: var(--space-3) var(--space-2);
   overflow-y: auto;
-  flex-shrink: 0;
+  overflow-x: hidden;
+  /* Constrain height inside the flex row shell so the list scrolls
+     internally instead of stretching the layout. */
+  min-height: 0;
+  height: 100%;
+  /* Keep scroll gestures contained to the sidebar. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Restore a thin, subtle scrollbar (globally hidden in app.css) so the
+     scrollable region is discoverable and interactive. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--content-border) transparent;
+}
+
+.mac-source-list::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+}
+
+.mac-source-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mac-source-list::-webkit-scrollbar-thumb {
+  background: var(--content-border);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.mac-source-list::-webkit-scrollbar-thumb:hover {
+  background: var(--sidebar-highlight);
+  background-clip: padding-box;
 }
 
 .mac-nav-section {

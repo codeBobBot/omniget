@@ -2,8 +2,12 @@ use super::{get_client, lcu_get_raw, lcu_post_raw, lcu_send, league_settings, Lc
 use base64::Engine;
 use futures::{SinkExt, StreamExt};
 use once_cell::sync::OnceCell;
+use rustls::client::danger::{ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::Emitter;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
@@ -83,16 +87,68 @@ async fn run_session(client: &LcuClient) -> Result<(), String> {
             .map_err(|_| "bad auth header".to_string())?,
     );
     // SAFETY: LCU runs on localhost with a self-signed certificate.  See
-    // `http_client()` in mod.rs for the full threat-model rationale.
-    let tls = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| format!("tls setup failed: {}", e))?;
+    // `http_client()` in mod.rs for the full threat-model rationale.  We use a
+    // custom cert verifier that unconditionally accepts the peer certificate
+    // (equivalent to `danger_accept_invalid_certs(true)`), because the LCU
+    // certificate is never part of any system trust store and the connection is
+    // bound to 127.0.0.1 only.
+    #[derive(Debug)]
+    struct AcceptInvalidCerts;
+    impl ServerCertVerifier for AcceptInvalidCerts {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            vec![
+                SignatureScheme::RSA_PKCS1_SHA256,
+                SignatureScheme::RSA_PKCS1_SHA384,
+                SignatureScheme::RSA_PKCS1_SHA512,
+                SignatureScheme::RSA_PSS_SHA256,
+                SignatureScheme::RSA_PSS_SHA384,
+                SignatureScheme::RSA_PSS_SHA512,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP521_SHA512,
+                SignatureScheme::ED25519,
+                SignatureScheme::ED448,
+            ]
+        }
+    }
+    let config = ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(AcceptInvalidCerts))
+        .with_no_client_auth();
     let (stream, _) = tokio_tungstenite::connect_async_tls_with_config(
         request,
         None,
         false,
-        Some(Connector::NativeTls(tls)),
+        Some(Connector::Rustls(Arc::new(config))),
     )
     .await
     .map_err(|e| format!("websocket connect failed: {}", e))?;
