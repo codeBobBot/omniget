@@ -125,6 +125,20 @@
       showToast("error", $t("omnibox.adv.url_required"));
       return;
     }
+    // Support multiple URLs separated by semicolons (or whitespace) for batch.
+    const urls = Array.from(
+      new Set(
+        trimmedUrl
+          .split(";")
+          .flatMap((part) => part.split(/[\s\n]+/))
+          .map((u) => u.trim())
+          .filter(Boolean),
+      ),
+    );
+    if (urls.length === 0) {
+      showToast("error", $t("omnibox.adv.url_required"));
+      return;
+    }
     const settings = getSettings();
     let outputDir = settings?.download.default_output_dir ?? "";
     if (!outputDir || settings?.download.always_ask_path) {
@@ -135,14 +149,17 @@
       if (!picked) return;
       outputDir = picked as string;
     }
+    const customArgs = parseArgs(argsText);
     submitting = true;
     try {
-      await invoke("download_with_custom_args", {
-        url: trimmedUrl,
-        outputDir,
-        customArgs: parseArgs(argsText),
-        cookieSlug: null,
-      });
+      for (const u of urls) {
+        await invoke("download_with_custom_args", {
+          url: u,
+          outputDir,
+          customArgs,
+          cookieSlug: null,
+        });
+      }
       showToast("success", $t("omnibox.adv.queued"));
       url = "";
     } catch (e) {

@@ -403,7 +403,18 @@
       return;
     }
 
-    const urls = trimmed.split(/[\s\n]+/).filter(isUrl);
+    // Batch detection: split on semicolons first (explicit delimiter the user
+    // asked for), then on whitespace/newlines, and keep only valid URLs. This
+    // supports "url1;url2;url3", "url1 url2", and mixed forms.
+    const urls = Array.from(
+      new Set(
+        trimmed
+          .split(";")
+          .flatMap((part) => part.split(/[\s\n]+/))
+          .map((u) => u.trim())
+          .filter(isUrl),
+      ),
+    );
 
     if (urls.length > 1) {
       omniState = { kind: "batch", urls };

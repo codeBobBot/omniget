@@ -117,7 +117,17 @@
       return;
     }
 
-    const urls = trimmed.split(/[\s\n]+/).filter(isUrl);
+    // Batch detection: split on semicolons first (explicit delimiter), then on
+    // whitespace/newlines; keep only valid URLs and dedupe.
+    const urls = Array.from(
+      new Set(
+        trimmed
+          .split(";")
+          .flatMap((part) => part.split(/[\s\n]+/))
+          .map((u) => u.trim())
+          .filter(isUrl),
+      ),
+    );
     if (urls.length > 1) {
       omniState = { kind: "batch", urls };
       return;
