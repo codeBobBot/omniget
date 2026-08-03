@@ -384,9 +384,22 @@ pub fn run() {
                     return None;
                 }
                 let slug = omniget_core::core::log_hook::current_cookie_slug();
-                let path = crate::cookies::account_path_for_consumer(&root, slug.as_deref())?;
-                crate::cookies::touch_last_used(&root, slug.as_deref().unwrap_or("_default"));
-                Some(path)
+                if let Some(path) =
+                    crate::cookies::account_path_for_consumer(&root, slug.as_deref())
+                {
+                    crate::cookies::touch_last_used(&root, slug.as_deref().unwrap_or("_default"));
+                    return Some(path);
+                }
+                // No logged-in account: fall back to the platform-managed
+                // anonymous cookie (e.g. bilibili `_anonymous`) so yt-dlp can
+                // carry the required tracking cookies instead of being rejected
+                // with HTTP 412 by sites that require them.
+                if let Some(path) =
+                    crate::cookies::account_path_for_consumer(&root, Some("_anonymous"))
+                {
+                    return Some(path);
+                }
+                None
             });
             core::ytdlp::set_managed_cookies_only_fn(|| {
                 storage::config::load_settings_standalone()

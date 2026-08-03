@@ -8,6 +8,7 @@ use crate::core::ytdlp;
 use crate::models::media::{
     DownloadOptions, DownloadResult, MediaInfo, MediaType, VideoQuality as MediaVideoQuality,
 };
+use crate::platforms::bilibili::cookie;
 
 pub fn is_playlist_or_series(url: &str) -> bool {
     if let Ok(parsed) = url::Url::parse(url) {
@@ -31,6 +32,10 @@ pub fn bilibili_extra_flags() -> Vec<String> {
 }
 
 pub async fn get_media_info(url: &str) -> anyhow::Result<MediaInfo> {
+    // Ensure the anonymous bilibili cookies (buvid3/bili_ticket) exist and are
+    // fresh, otherwise yt-dlp is rejected by Bilibili with HTTP 412.
+    let _ = cookie::ensure_fresh().await;
+
     let ytdlp_path = ytdlp::find_ytdlp_cached()
         .await
         .ok_or_else(|| anyhow!("yt-dlp not found"))?;
@@ -166,6 +171,9 @@ pub async fn download(
     progress: mpsc::Sender<ProgressUpdate>,
 ) -> anyhow::Result<DownloadResult> {
     let _ = progress.send(ProgressUpdate::percent(0.0)).await;
+
+    // Ensure anonymous bilibili cookies are fresh so yt-dlp isn't rejected (412).
+    let _ = cookie::ensure_fresh().await;
 
     let ytdlp_path = match &opts.ytdlp_path {
         Some(p) => p.clone(),
