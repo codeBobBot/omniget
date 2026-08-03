@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::models::media::{DownloadOptions, DownloadResult, MediaInfo, MediaType};
+use crate::models::media::{DownloadOptions, DownloadResult, MediaInfo, MediaType, VideoQuality};
 use crate::platforms::traits::PlatformDownloader;
 
 pub mod api;
@@ -221,6 +221,110 @@ fn sanitize(s: &str) -> String {
     }
 }
 
+/// Fetch bilibili media info via the in-house API engine instead of yt-dlp.
+///
+/// The API path is much faster and more reliable than yt-dlp for bilibili
+/// (no slow metadata extraction, no 412 without cookies). It reuses the same
+/// parser/preview pipeline that `bilibili_preview_info` uses. If it fails we
+/// fall back to the yt-dlp-based `legacy::get_media_info` so the user is never
+/// left without metadata.
+async fn get_media_info_via_api(url: &str) -> anyhow::Result<MediaInfo> {
+    let _ = cookie::ensure_fresh().await;
+
+    let slug = active_account_slug();
+    let client = build_api_client(slug.as_deref(), None)
+        .map_err(|e| anyhow!("bilibili api client init failed: {}", e))?;
+
+    let mut effective_url = url.to_string();
+    if url_kind::is_b23_short(&effective_url) {
+        if let Ok(resolved) = url_kind::resolve_b23(&client, &effective_url).await {
+            effective_url = resolved;
+        }
+    }
+
+    let kind = url_kind::detect(&effective_url)
+        .map_err(|e| anyhow!("Failed to detect URL kind: {}", e.i18n_key()))?;
+    let parsed = parser::parse(&client, &kind)
+        .await
+        .map_err(|e| anyhow!("Failed to parse bilibili content: {}", e.i18n_key()))?;
+
+    let item = parsed
+        .items
+        .first()
+        .ok_or_else(|| anyhow!("No items found for this bilibili URL"))?;
+
+    // Build the quality list from the in-house preview pipeline.
+    let mut qualities: Vec<VideoQuality> = Vec::new();
+    if let Some(info) = preview::fetch(&client, item, &kind).await.ok() {
+        for qn in info.available_qns() {
+            qualities.push(VideoQuality {
+                label: preview::qn_label(qn).to_string(),
+                width: 0,
+                height: qn_to_height(qn),
+                url: effective_url.clone(),
+                format: "mp4".to_string(),
+            });
+        }
+        for qn in info.available_audio_qns() {
+            qualities.push(VideoQuality {
+                label: format!("audio/{}", preview::audio_qn_label(qn)),
+                width: 0,
+                height: 0,
+                url: effective_url.clone(),
+                format: "m4a".to_string(),
+            });
+        }
+    }
+    // Guarantee at least one entry so the download engine always has an entry URL.
+    if qualities.is_empty() {
+        qualities.push(VideoQuality {
+            label: "auto".to_string(),
+            width: 0,
+            height: 0,
+            url: effective_url.clone(),
+            format: "mp4".to_string(),
+        });
+    }
+
+    let media_type = if parsed.items.len() > 1 {
+        MediaType::Playlist
+    } else {
+        MediaType::Video
+    };
+    let thumbnail_url = item
+        .cover_url
+        .clone()
+        .or_else(|| parsed.metadata.poster.clone())
+        .or_else(|| parsed.metadata.cover.clone());
+
+    Ok(MediaInfo {
+        title: parsed.title.clone(),
+        author: parsed.metadata.uploader.clone().unwrap_or_default(),
+        platform: "bilibili".to_string(),
+        duration_seconds: item.duration_seconds,
+        thumbnail_url,
+        available_qualities: qualities,
+        media_type,
+        file_size_bytes: None,
+    })
+}
+
+/// Map a bilibili quality number to an approximate vertical resolution for
+/// display purposes. Exact heights are returned by the API at download time.
+fn qn_to_height(qn: u32) -> u32 {
+    match qn {
+        125 | 127 | 128 => 1080,
+        116 | 120 => 1080,
+        112 | 108 | 100 => 1080,
+        80 => 1080,
+        74 => 720,
+        64 => 720,
+        32 => 480,
+        16 => 360,
+        _ => 0,
+    }
+}
+
 mod mux {
     pub use super::engine::mux::Container;
 
@@ -259,7 +363,18 @@ impl PlatformDownloader for BilibiliDownloader {
     }
 
     async fn get_media_info(&self, url: &str) -> anyhow::Result<MediaInfo> {
-        legacy::get_media_info(url).await
+        // Prefer the fast in-house API engine over yt-dlp for metadata. Fall
+        // back to yt-dlp if the API path fails (e.g. unexpected URL shape).
+        match get_media_info_via_api(url).await {
+            Ok(info) => Ok(info),
+            Err(e) => {
+                tracing::warn!(
+                    "[bilibili] api media-info failed ({}), falling back to yt-dlp",
+                    e
+                );
+                legacy::get_media_info(url).await
+            }
+        }
     }
 
     async fn download(
