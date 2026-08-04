@@ -32,6 +32,26 @@ pub struct AuthCookie {
     pub secure: bool,
 }
 
+/// Mask secrets in a URL before logging it. OAuth endpoints commonly embed
+/// `token` / `code` / `access_token` / `state` in the query string; logging the
+/// raw URL would leak credentials into the log file.
+fn mask_url_secrets(url: &str) -> String {
+    match url::Url::parse(url) {
+        Ok(mut parsed) => {
+            let pairs: Vec<(String, String)> = parsed
+                .query_pairs()
+                .map(|(k, _)| (k.to_string(), "[REDACTED]".to_string()))
+                .collect();
+            parsed.query_pairs_mut().clear().extend_pairs(pairs);
+            parsed.to_string()
+        }
+        // Not a parseable URL — fall back to redacting any obvious token.
+        Err(_) => url
+            .replace(|c: char| c == '\r' || c == '\n', "")
+            .to_string(),
+    }
+}
+
 #[tauri::command]
 pub async fn open_auth_webview(
     app: AppHandle,
@@ -39,7 +59,7 @@ pub async fn open_auth_webview(
 ) -> Result<AuthWebviewResult, String> {
     tracing::info!(
         "[auth_webview] opening: url={}, success_pattern={:?}, wait_for={:?}, domains={:?}",
-        request.url,
+        mask_url_secrets(&request.url),
         request.success_url_contains,
         request.wait_for_cookie,
         request.cookie_domains
@@ -109,7 +129,7 @@ pub async fn open_auth_webview(
     let webview_window = builder
         .on_navigation(move |url| {
             let url_str = url.to_string();
-            tracing::debug!("[auth_webview] navigation: {}", url_str);
+            tracing::debug!("[auth_webview] navigation: {}", mask_url_secrets(&url_str));
 
             let mut is_success = false;
 

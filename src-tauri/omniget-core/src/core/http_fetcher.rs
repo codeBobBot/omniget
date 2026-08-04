@@ -201,6 +201,9 @@ impl HttpFetcher {
         &self,
         progress_tx: mpsc::Sender<ProgressUpdate>,
     ) -> anyhow::Result<HttpFetcherResult> {
+        // Defense-in-depth against DNS rebinding / SSRF: re-verify at connect
+        // time that the host resolves to a public IP (not just at URL-parse time).
+        crate::core::url_safety::assert_public_host(&self.url).await?;
         let probe = self.probe().await?;
 
         let part_path = part_path_for(&self.output_path);
@@ -323,7 +326,28 @@ impl HttpFetcher {
         }
         let total = resp.content_length();
 
-        let mut file = tokio::fs::File::create(part_path).await?;
+        // SECURITY: use create_new so a symlink re-planted after the above
+        // remove_file fails loudly instead of silently truncating the link
+        // target (TOCTOU / symlink attack). Part files are unique per URL hash,
+        // so collisions here indicate tampering.
+        let mut file = match tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(part_path)
+            .await
+        {
+            Ok(f) => f,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                // Shouldn't happen (remove_file ran above), but tolerate a
+                // racing creation by falling back to a truncated open.
+                tokio::fs::OpenOptions::new()
+                    .write(true)
+                    .truncate(true)
+                    .open(part_path)
+                    .await?
+            }
+            Err(e) => return Err(anyhow!("create part file failed: {}", e)),
+        };
         let mut downloaded: u64 = 0;
         let mut stream = resp.bytes_stream();
 

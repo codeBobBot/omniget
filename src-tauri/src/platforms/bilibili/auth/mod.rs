@@ -88,7 +88,11 @@ pub fn persist_account(
 ) -> std::result::Result<String, String> {
     use crate::extension_storage::ExtensionCookie;
 
-    let slug = slug_from_uname(uname);
+    // Suffix a short unique fragment so two different accounts that yield the
+    // same slug (e.g. identical display names) never overwrite each other's
+    // cookie file / registry entry.
+    let uniq = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
+    let slug = format!("{}-{}", slug_from_uname(uname), uniq);
     let now_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)

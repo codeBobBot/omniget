@@ -639,8 +639,10 @@ fn has_explicit_cookie_header(args: &[String]) -> bool {
 }
 
 fn append_cookie_header(args: &mut Vec<String>, cookie_header: &str) {
+    // Sanitize to prevent CRLF injection in the Cookie header value.
+    let safe = cookie_header.replace(|c: char| c == '\r' || c == '\n', "");
     args.push("--add-headers".to_string());
-    args.push(format!("Cookie:{}", cookie_header));
+    args.push(format!("Cookie:{}", safe));
 }
 
 enum MetadataCookieSource {
@@ -2346,8 +2348,15 @@ pub async fn download_video(
             if lower == "referer" || lower == "cookie" || lower == "user-agent" {
                 continue;
             }
+            // Sanitize to prevent CRLF header injection (smuggling extra
+            // `--add-headers` payloads / breaking the yt-dlp CLI arg stream).
+            let safe_name = name.replace(|c: char| c == '\r' || c == '\n', "");
+            let safe_value = value.replace(|c: char| c == '\r' || c == '\n', "");
+            if safe_name.is_empty() {
+                continue;
+            }
             base_args.push("--add-headers".to_string());
-            base_args.push(format!("{}:{}", name, value));
+            base_args.push(format!("{}:{}", safe_name, safe_value));
         }
     }
 
