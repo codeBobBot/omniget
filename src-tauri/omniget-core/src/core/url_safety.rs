@@ -81,20 +81,17 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
     }
 }
 
-/// `Ipv4Addr::is_reserved()` is unstable; replicate its semantics with the
-/// stable `is_special()` plus explicit reserved-range checks.
+/// `Ipv4Addr::is_reserved()` is unstable; replicate the reserved-range
+/// semantics with stable `is_*` helpers plus explicit range checks.
 fn is_reserved_v4(v4: &std::net::Ipv4Addr) -> bool {
-    if v4.is_special() {
-        return true;
-    }
     let o = v4.octets();
-    // 192.0.0.0/24 (incl. 192.0.2.0/24 documentation handled above),
-    // 198.51.100.0/24, 203.0.113.0/24, 240.0.0.0/4, 0.0.0.0/8
-    (o[0] == 192 && o[1] == 0 && o[2] == 0)
+    // 0.0.0.0/8, 192.0.0.0/24 (incl. 192.0.2.0/24 TEST-NET),
+    // 198.51.100.0/24, 203.0.113.0/24, 240.0.0.0/4 (incl. 255.255.255.255)
+    o[0] == 0
+        || (o[0] == 192 && o[1] == 0 && o[2] == 0)
         || (o[0] == 198 && o[1] == 51 && o[2] == 100)
         || (o[0] == 203 && o[1] == 0 && o[2] == 113)
         || o[0] >= 240
-        || o[0] == 0
 }
 
 fn is_shared_address(ip: &std::net::Ipv4Addr) -> bool {
