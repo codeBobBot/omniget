@@ -1,5 +1,7 @@
 //! URL safety helpers shared across the download engine.
 
+use anyhow::anyhow;
+
 /// Returns true if the absolute URL points at a non-public address
 /// (loopback, private RFC1918, link-local, or cloud metadata endpoints).
 ///
@@ -66,8 +68,8 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
                 || v4.is_link_local()
                 || v4.is_unspecified()
                 || v4.is_broadcast()
-                || v4.is_reserved()
                 || v4.is_documentation()
+                || is_reserved_v4(v4)
                 || is_shared_address(v4)
         }
         std::net::IpAddr::V6(v6) => {
@@ -79,6 +81,22 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
     }
 }
 
+/// `Ipv4Addr::is_reserved()` is unstable; replicate its semantics with the
+/// stable `is_special()` plus explicit reserved-range checks.
+fn is_reserved_v4(v4: &std::net::Ipv4Addr) -> bool {
+    if v4.is_special() {
+        return true;
+    }
+    let o = v4.octets();
+    // 192.0.0.0/24 (incl. 192.0.2.0/24 documentation handled above),
+    // 198.51.100.0/24, 203.0.113.0/24, 240.0.0.0/4, 0.0.0.0/8
+    (o[0] == 192 && o[1] == 0 && o[2] == 0)
+        || (o[0] == 198 && o[1] == 51 && o[2] == 100)
+        || (o[0] == 203 && o[1] == 0 && o[2] == 113)
+        || o[0] >= 240
+        || o[0] == 0
+}
+
 fn is_shared_address(ip: &std::net::Ipv4Addr) -> bool {
     // 100.64.0.0/10 (CGNAT / shared address space)
     ip.octets()[0] == 100 && (ip.octets()[1] & 0xC0) == 0x40
@@ -86,7 +104,10 @@ fn is_shared_address(ip: &std::net::Ipv4Addr) -> bool {
 
 fn is_ipv4_mapped_private(ip: &std::net::Ipv6Addr) -> bool {
     match ip.to_ipv4_mapped() {
-        Some(v4) => is_private_ip(&v4),
+        Some(v4) => {
+            let mapped: std::net::IpAddr = v4.into();
+            is_private_ip(&mapped)
+        }
         None => false,
     }
 }
